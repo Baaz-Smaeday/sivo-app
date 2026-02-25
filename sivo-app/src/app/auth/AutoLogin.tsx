@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
 const CREDENTIALS: Record<string, { email: string; pass: string; redirect: string; label: string; icon: string; color: string }> = {
@@ -11,7 +10,6 @@ const CREDENTIALS: Record<string, { email: string; pass: string; redirect: strin
 }
 
 export default function AutoLogin({ role }: { role: string }) {
-  const router = useRouter()
   const supabase = createClient()
   const [status, setStatus] = useState<'loading' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
@@ -23,8 +21,9 @@ export default function AutoLogin({ role }: { role: string }) {
       try {
         const { error } = await supabase.auth.signInWithPassword({ email: acc.email, password: acc.pass })
         if (error) throw error
-        router.push(acc.redirect)
-        router.refresh()
+        // Wait for session cookie to propagate, then hard redirect
+        await new Promise(r => setTimeout(r, 800))
+        window.location.href = acc.redirect
       } catch (err: any) {
         setStatus('error')
         setErrorMsg(err.message || 'Login failed')
