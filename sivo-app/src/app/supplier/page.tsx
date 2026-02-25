@@ -1,10 +1,32 @@
 import { createClient } from '@/lib/supabase-server'
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import SupplierDashboard from './SupplierDashboard'
 
 export const revalidate = 0
 
 export default async function SupplierPage() {
+  // Check demo cookie first
+  const cookieStore = cookies()
+  const demoRole = cookieStore.get('sivo-demo-role')?.value
+
+  if (demoRole === 'supplier') {
+    return (
+      <SupplierDashboard
+        products={[]}
+        quotes={[]}
+        profile={{
+          id: 'demo-supplier',
+          full_name: 'Raj Patel',
+          email: 'supplier@demo.co.uk',
+          role: 'supplier',
+          company: { name: 'GHP Manufacturing' },
+        }}
+      />
+    )
+  }
+
+  // Real Supabase auth check
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -16,7 +38,7 @@ export default async function SupplierPage() {
     .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'supplier') redirect('/dashboard')
+  if (profile?.role !== 'supplier' && profile?.role !== 'admin') redirect('/dashboard')
 
   const { data: products } = await supabase
     .from('products')
