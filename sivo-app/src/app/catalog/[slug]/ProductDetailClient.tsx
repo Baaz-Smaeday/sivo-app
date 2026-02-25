@@ -32,6 +32,14 @@ export default function ProductDetailClient({ product, related }: { product: any
 
   useEffect(() => {
     const checkAccess = async () => {
+      // Check demo cookie first
+      const demoMatch = document.cookie.match(/sivo-demo-role=([^;]+)/)
+      const demoRole = demoMatch ? demoMatch[1] : ''
+      if (demoRole === 'buyer' || demoRole === 'admin' || demoRole === 'supplier') {
+        setCanSeePrice(true)
+        return
+      }
+      // Real auth check
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: profile } = await supabase
@@ -88,7 +96,6 @@ export default function ProductDetailClient({ product, related }: { product: any
           )}
 
           <h1 className="font-serif text-3xl sm:text-4xl text-white mb-2">{product.name}</h1>
-
           <div className="text-xs text-brand-muted mb-4">SKU: {product.sku}</div>
 
           {/* Price */}
@@ -129,9 +136,7 @@ export default function ProductDetailClient({ product, related }: { product: any
                   <button
                     onClick={() => setQty(Math.max(product.moq, qty - 1))}
                     className="w-10 h-10 border border-brand-border text-brand-text rounded-l flex items-center justify-center hover:bg-brand-surface"
-                  >
-                    −
-                  </button>
+                  >−</button>
                   <input
                     type="number"
                     value={qty}
@@ -141,16 +146,12 @@ export default function ProductDetailClient({ product, related }: { product: any
                   <button
                     onClick={() => setQty(qty + 1)}
                     className="w-10 h-10 border border-brand-border text-brand-text rounded-r flex items-center justify-center hover:bg-brand-surface"
-                  >
-                    +
-                  </button>
+                  >+</button>
                 </div>
               </div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-white font-semibold">Order Total</span>
-                <span className="font-serif text-2xl text-brand-gold">
-                  £{total.toLocaleString()}
-                </span>
+                <span className="font-serif text-2xl text-brand-gold">£{total.toLocaleString()}</span>
               </div>
               <div className="text-[10px] text-brand-muted">
                 MOQ: {product.moq} units · 50% deposit to confirm
@@ -200,11 +201,9 @@ export default function ProductDetailClient({ product, related }: { product: any
           {/* CTA */}
           {canSeePrice ? (
             <button onClick={handleAddToBasket}
-                    className={`w-full text-sm tracking-wider uppercase py-3 px-6 rounded transition-all duration-300 font-semibold ${
-                      added || inBasket
-                        ? 'bg-emerald-600 text-white'
-                        : 'btn-gold'
-                    }`}>
+              className={`w-full text-sm tracking-wider uppercase py-3 px-6 rounded transition-all duration-300 font-semibold ${
+                added || inBasket ? 'bg-emerald-600 text-white' : 'btn-gold'
+              }`}>
               {added ? '✓ Added to Quote Basket!' : inBasket ? `✓ In Quote Basket (${inBasket.qty})` : '+ Add to Quote Basket'}
             </button>
           ) : (
