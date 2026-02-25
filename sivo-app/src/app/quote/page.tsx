@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useBasket } from '@/lib/basket'
 import { createClient } from '@/lib/supabase-browser'
+import BackBar from '@/components/BackBar'
 
 function getDemoCookie(): string {
   if (typeof document === 'undefined') return ''
@@ -146,6 +147,8 @@ export default function QuotePage() {
   }
 
   return (
+    <>
+    <BackBar currentLabel="Quote Basket" crumbs={[{ label: 'Collection', href: '/catalog' }]} />
     <div className="pt-[80px]">
       <section className="section">
         <div className="max-w-[1000px] mx-auto px-4 sm:px-6">
@@ -219,5 +222,6 @@ export default function QuotePage() {
         </div>
       </section>
     </div>
+    </>
   )
 }
