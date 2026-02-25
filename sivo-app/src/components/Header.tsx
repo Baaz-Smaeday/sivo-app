@@ -26,9 +26,9 @@ const NAV_LINKS = [
 ]
 
 const DEMO_LOGINS = [
-  { role: 'admin',    icon: '👑', label: 'Admin',    sub: 'Navi Singh · SIVO',            color: '#c9a96e', href: '/auth/admin' },
-  { role: 'buyer',    icon: '🛒', label: 'Buyer',    sub: 'James Wilson · Wilson Interiors', color: '#4fc3f7', href: '/auth/buyer' },
-  { role: 'supplier', icon: '🏭', label: 'Supplier', sub: 'Raj Patel · GHP Mfg',           color: '#81c784', href: '/auth/supplier' },
+  { role: 'admin',    icon: '👑', label: 'Admin',    sub: 'Navi Singh · SIVO',              color: '#c9a96e', href: '/api/demo-login?role=admin' },
+  { role: 'buyer',    icon: '🛒', label: 'Buyer',    sub: 'James Wilson · Wilson Interiors', color: '#4fc3f7', href: '/api/demo-login?role=buyer' },
+  { role: 'supplier', icon: '🏭', label: 'Supplier', sub: 'Raj Patel · GHP Mfg',            color: '#81c784', href: '/api/demo-login?role=supplier' },
 ]
 
 export default function Header() {
@@ -175,10 +175,16 @@ export default function Header() {
               {dropdownOpen && (
                 <div className="absolute top-full right-0 mt-2 min-w-[180px] bg-[var(--card)] border border-[var(--border)] rounded-[var(--r)] shadow-[0_12px_40px_rgba(0,0,0,.5)] z-[100] animate-fade-up"
                      onClick={(e) => e.stopPropagation()}>
-                  {(profile?.role === 'admin' || profile?.role === 'supplier') && (
+                  {(profile?.role === 'admin') && (
                     <Link href="/admin" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
                           onClick={() => setDropdownOpen(false)}>
                       📊 Admin Dashboard
+                    </Link>
+                  )}
+                  {(profile?.role === 'supplier') && (
+                    <Link href="/supplier" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
+                          onClick={() => setDropdownOpen(false)}>
+                      🏭 Supplier Dashboard
                     </Link>
                   )}
                   <Link href="/dashboard" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
@@ -226,7 +232,7 @@ export default function Header() {
                     ⚡ Quick Demo Login
                   </div>
                   {DEMO_LOGINS.map(acc => (
-                    <Link
+                    <a
                       key={acc.role}
                       href={acc.href}
                       onClick={() => setLoginDropdownOpen(false)}
@@ -237,7 +243,7 @@ export default function Header() {
                         <div style={{ fontSize: 12, fontWeight: 600, color: acc.color }}>{acc.label}</div>
                         <div style={{ fontSize: 9, color: 'var(--muted)' }}>{acc.sub}</div>
                       </div>
-                    </Link>
+                    </a>
                   ))}
                   <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px' }}>
                     <Link
@@ -288,13 +294,13 @@ export default function Header() {
               <div className="pt-2 space-y-1">
                 <div style={{ fontSize: 8, letterSpacing: 2, color: 'var(--muted)', textTransform: 'uppercase', paddingBottom: 6 }}>⚡ Demo Login</div>
                 {DEMO_LOGINS.map(acc => (
-                  <Link key={acc.role} href={acc.href}
-                        className="flex items-center gap-2 py-2 hover:text-white transition-colors"
-                        onClick={() => setMobileOpen(false)}>
+                  <a key={acc.role} href={acc.href}
+                     className="flex items-center gap-2 py-2 hover:text-white transition-colors"
+                     onClick={() => setMobileOpen(false)}>
                     <span>{acc.icon}</span>
                     <span style={{ fontSize: 11, color: acc.color }}>{acc.label}</span>
                     <span style={{ fontSize: 9, color: 'var(--muted)' }}>— {acc.sub}</span>
-                  </Link>
+                  </a>
                 ))}
                 <Link href="/auth?tab=register" className="btn-gold btn-sm block text-center mt-2" onClick={() => setMobileOpen(false)}>Apply for Trade Account</Link>
               </div>
