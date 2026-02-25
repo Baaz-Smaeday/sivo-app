@@ -90,13 +90,14 @@ export default function AuthForm() {
 
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        // Ensure profile has the correct role (fixes fresh Supabase setups)
-        await supabase
-          .from('profiles')
-          .update({ role, status: 'approved' })
-          .eq('id', user.id)
+        // Call server-side API to set role via service key (bypasses RLS)
+        await fetch('/api/demo-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, email }),
+        })
 
-        // Redirect based on known demo role — don't rely on DB lookup
+        // Redirect based on known demo role
         if (role === 'admin' || role === 'supplier') {
           router.push('/admin')
         } else {
