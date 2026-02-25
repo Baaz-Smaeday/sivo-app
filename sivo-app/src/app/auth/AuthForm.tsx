@@ -81,11 +81,29 @@ export default function AuthForm() {
     setLoading(false)
   }
 
-  const handleDemoLogin = async (email: string, pass: string) => {
+  const handleDemoLogin = async (email: string, pass: string, role: string) => {
     setDemoLoading(email)
     setError('')
     try {
-      await doLogin(email, pass)
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pass })
+      if (error) throw error
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Ensure profile has the correct role (fixes fresh Supabase setups)
+        await supabase
+          .from('profiles')
+          .update({ role, status: 'approved' })
+          .eq('id', user.id)
+
+        // Redirect based on known demo role — don't rely on DB lookup
+        if (role === 'admin' || role === 'supplier') {
+          router.push('/admin')
+        } else {
+          router.push('/dashboard')
+        }
+        router.refresh()
+      }
     } catch (err: any) {
       setError(`Demo login failed for ${email}. Make sure the account exists — see setup instructions below.`)
     }
@@ -191,7 +209,7 @@ export default function AuthForm() {
             {DEMO_ACCOUNTS.map(acc => (
               <button
                 key={acc.email}
-                onClick={() => handleDemoLogin(acc.email, acc.pass)}
+                onClick={() => handleDemoLogin(acc.email, acc.pass, acc.role)}
                 disabled={demoLoading !== null}
                 className="card card-glow"
                 style={{
