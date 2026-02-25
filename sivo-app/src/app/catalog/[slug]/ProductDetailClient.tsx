@@ -4,6 +4,26 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase-browser'
 import { useBasket } from '@/lib/basket'
+import BackBar from '@/components/BackBar'
+
+const RECENTLY_VIEWED_KEY = 'sivo_recently_viewed'
+const MAX_RECENT = 6
+
+function saveRecentlyViewed(product: any) {
+  try {
+    const existing: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
+    const filtered = existing.filter((p: any) => p.id !== product.id)
+    const updated = [{ id: product.id, name: product.name, slug: product.slug, image: null, category: product.category?.name || '', price: product.trade_price }, ...filtered].slice(0, MAX_RECENT)
+    localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(updated))
+  } catch {}
+}
+
+function getRecentlyViewed(excludeId: string): any[] {
+  try {
+    const existing: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
+    return existing.filter((p: any) => p.id !== excludeId).slice(0, 4)
+  } catch { return [] }
+}
 
 // ── QC & Compliance Scorecard ────────────────────────────────────────────────
 function ScoreRing({ score, label, color }: { score: number; label: string; color: string }) {
@@ -90,11 +110,20 @@ export default function ProductDetailClient({ product, related }: { product: any
   const [canSeePrice, setCanSeePrice] = useState(false)
   const [qty, setQty] = useState(product.moq || 1)
   const [added, setAdded] = useState(false)
+  const [recentlyViewed, setRecentlyViewed] = useState<any[]>([])
   const supabase = createClient()
   const { addItem, items } = useBasket()
 
   const inBasket = items.find((i: any) => i.productId === product.id)
   const primaryImage = product.images?.find((i: any) => i.is_primary)?.url || product.images?.[0]?.url || null
+
+  // Lead time estimate
+  const leadWeeks = product.lead_time_days ? Math.round(product.lead_time_days / 7) : 9
+  const estDelivery = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + leadWeeks * 7)
+    return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+  }
 
   const handleAddToBasket = () => {
     addItem({
@@ -112,6 +141,11 @@ export default function ProductDetailClient({ product, related }: { product: any
   }
 
   useEffect(() => {
+    // Save this product to recently viewed
+    saveRecentlyViewed(product)
+    // Load recently viewed (excluding current)
+    setRecentlyViewed(getRecentlyViewed(product.id))
+
     const checkAccess = async () => {
       // Check demo cookie first
       const match = document.cookie.match(/sivo-demo-role=([^;]+)/)
@@ -139,6 +173,14 @@ export default function ProductDetailClient({ product, related }: { product: any
   const total = product.trade_price * qty
 
   return (
+    <>
+      <BackBar
+        currentLabel={product.name}
+        crumbs={[
+          { label: 'Collection', href: '/catalog' },
+          ...(product.category ? [{ label: product.category.name, href: `/catalog?category=${product.category.slug || product.category.name}` }] : []),
+        ]}
+      />
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-brand-muted mb-6">
@@ -275,7 +317,7 @@ export default function ProductDetailClient({ product, related }: { product: any
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             {[
               { icon: '🇬🇧', label: 'UK Registered' },
-              { icon: '📦', label: `${product.lead_time_days ? Math.round(product.lead_time_days / 7) : '8–10'} Wk Lead` },
+              { icon: '📦', label: `${leadWeeks} Wk Lead` },
               { icon: '✅', label: 'Docs on Request' },
               { icon: '🌿', label: 'FSC Where Applicable' },
             ].map(badge => (
@@ -285,6 +327,22 @@ export default function ProductDetailClient({ product, related }: { product: any
               </div>
             ))}
           </div>
+
+          {/* Lead Time Estimator */}
+          {canSeePrice && (
+            <div style={{ background: 'rgba(201,169,110,.05)', border: '1px solid rgba(201,169,110,.15)', borderRadius: 8, padding: '12px 16px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 20 }}>🚢</span>
+              <div>
+                <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase' as const, color: '#c9a96e', marginBottom: 2 }}>Estimated Delivery</div>
+                <div style={{ fontSize: 13, color: '#fff' }}>
+                  Order this week → <strong style={{ color: '#c9a96e' }}>{estDelivery()}</strong>
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,.35)', marginTop: 2 }}>
+                  {leadWeeks} week production · UK port delivery included
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* QC & Compliance Scorecard */}
           <QCScorecard product={product} />
@@ -333,6 +391,27 @@ export default function ProductDetailClient({ product, related }: { product: any
           </div>
         </section>
       )}
+
+      {/* Recently Viewed */}
+      {recentlyViewed.length > 0 && (
+        <section className="mt-12">
+          <h2 className="font-serif text-2xl text-white mb-6">Recently Viewed</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {recentlyViewed.map((p: any) => (
+              <Link href={`/catalog/${p.slug}`} key={p.id} className="card card-glow shimmer group overflow-hidden hover:border-brand-gold/30 transition-colors">
+                <div className="aspect-square bg-brand-surface flex items-center justify-center text-3xl text-brand-muted">
+                  🪑
+                </div>
+                <div className="p-3">
+                  <h3 className="text-xs text-white font-medium group-hover:text-brand-gold transition-colors">{p.name}</h3>
+                  <div className="text-[10px] text-brand-muted mt-1">{p.category}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
+    </>
   )
 }
