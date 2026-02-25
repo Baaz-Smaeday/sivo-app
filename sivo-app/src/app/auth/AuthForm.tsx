@@ -88,25 +88,15 @@ export default function AuthForm() {
       const { error } = await supabase.auth.signInWithPassword({ email, password: pass })
       if (error) throw error
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        // Call server-side API to set role via service key (bypasses RLS)
-        await fetch('/api/demo-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, email }),
-        })
-
-        // Redirect based on known demo role
-        if (role === 'admin' || role === 'supplier') {
-          router.push('/admin')
-        } else {
-          router.push('/dashboard')
-        }
-        router.refresh()
+      // Redirect based on known demo role — middleware will validate against DB
+      if (role === 'admin' || role === 'supplier') {
+        router.push('/admin')
+      } else {
+        router.push('/dashboard')
       }
+      router.refresh()
     } catch (err: any) {
-      setError(`Demo login failed for ${email}. Make sure the account exists — see setup instructions below.`)
+      setError(`Demo login failed for ${email}. Make sure the account exists in Supabase Auth.`)
     }
     setDemoLoading(null)
   }
