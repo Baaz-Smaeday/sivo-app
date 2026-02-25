@@ -6,6 +6,12 @@ import { useRouter } from 'next/navigation'
 import { useBasket } from '@/lib/basket'
 import { createClient } from '@/lib/supabase-browser'
 
+function getDemoCookie(): string {
+  if (typeof document === 'undefined') return ''
+  const match = document.cookie.match(/sivo-demo-role=([^;]+)/)
+  return match ? match[1] : ''
+}
+
 export default function QuotePage() {
   const { items, removeItem, updateQty, totalPrice, clearBasket } = useBasket()
   const [notes, setNotes] = useState('')
@@ -20,17 +26,24 @@ export default function QuotePage() {
     setError(null)
 
     try {
-      // Check auth
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/auth?tab=login')
+      // ── Demo mode: skip Supabase entirely ──
+      const demoRole = getDemoCookie()
+      if (demoRole) {
+        await new Promise(r => setTimeout(r, 900))
+        const demoRef = `SIVO-QR-DEMO-${Date.now().toString().slice(-4)}`
+        setSubmitted(demoRef)
+        clearBasket()
+        setSubmitting(false)
         return
       }
 
-      // Get profile
+      // ── Real auth ──
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/auth?tab=login'); return }
+
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, company_id, status')
+        .select('id, company_id, status, role')
         .eq('id', user.id)
         .single()
 
@@ -40,25 +53,15 @@ export default function QuotePage() {
         return
       }
 
-      if (profile.status !== 'approved' && profile.status !== 'admin') {
-        // Check if admin role
-        const { data: p2 } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-        if (p2?.role !== 'admin') {
-          setError('Your trade account must be approved before submitting quotes.')
-          setSubmitting(false)
-          return
-        }
+      if (profile.status !== 'approved' && profile.role !== 'admin') {
+        setError('Your trade account must be approved before submitting quotes.')
+        setSubmitting(false)
+        return
       }
 
-      // Generate ref ID
       const { data: refData } = await supabase.rpc('next_quote_ref')
       const refId = refData || `SIVO-QR-${Date.now()}`
 
-      // Create quote request
       const { data: quote, error: quoteErr } = await supabase
         .from('quote_requests')
         .insert({
@@ -72,32 +75,20 @@ export default function QuotePage() {
         .select('id, ref_id')
         .single()
 
-      if (quoteErr) {
-        setError('Failed to create quote: ' + quoteErr.message)
-        setSubmitting(false)
-        return
-      }
+      if (quoteErr) { setError('Failed to create quote: ' + quoteErr.message); setSubmitting(false); return }
 
-      // Create quote items
-      const quoteItems = items.map(item => ({
-        quote_id: quote.id,
-        product_id: item.productId,
-        quantity: item.qty,
-        unit_price: item.price,
-        line_total: item.price * item.qty,
-      }))
+      const { error: itemsErr } = await supabase.from('quote_items').insert(
+        items.map(item => ({
+          quote_id: quote.id,
+          product_id: item.productId,
+          quantity: item.qty,
+          unit_price: item.price,
+          line_total: item.price * item.qty,
+        }))
+      )
 
-      const { error: itemsErr } = await supabase
-        .from('quote_items')
-        .insert(quoteItems)
+      if (itemsErr) { setError('Failed to save items: ' + itemsErr.message); setSubmitting(false); return }
 
-      if (itemsErr) {
-        setError('Failed to save quote items: ' + itemsErr.message)
-        setSubmitting(false)
-        return
-      }
-
-      // Success
       setSubmitted(quote.ref_id)
       clearBasket()
     } catch (err: any) {
@@ -107,35 +98,91 @@ export default function QuotePage() {
     setSubmitting(false)
   }
 
-  // Success screen
+  // ── SUCCESS SCREEN ──
   if (submitted) {
     return (
-      <div className="pt-[80px] min-h-[70vh] flex items-center justify-center">
-        <div className="max-w-md mx-auto text-center px-4">
-          <div className="text-6xl mb-4">✅</div>
-          <h1 className="font-serif text-3xl text-white mb-3">Quote Submitted!</h1>
-          <div className="card card-glow shimmer p-4 mb-6">
-            <div className="text-[10px] font-semibold tracking-[1.5px] uppercase text-[var(--muted)] mb-1">
+      <div style={{ paddingTop: 80, minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center', padding: '0 20px' }}>
+
+          {/* Green tick */}
+          <div style={{
+            width: 72, height: 72, borderRadius: '50%', background: '#66bb6a',
+            color: '#fff', fontSize: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 20px', boxShadow: '0 0 32px rgba(102,187,106,.3)',
+          }}>✓</div>
+
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 32, color: '#fff', marginBottom: 6 }}>
+            Quote Submitted!
+          </div>
+
+          {/* Ref badge */}
+          <div style={{
+            padding: '12px 20px', background: 'var(--card)',
+            border: '1px solid rgba(201,169,110,.3)', borderRadius: 8, marginBottom: 20,
+          }}>
+            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase' as const, color: 'var(--muted)', marginBottom: 4 }}>
               Reference Number
             </div>
-            <div className="font-mono text-xl text-[var(--gold)] font-bold">{submitted}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 18, color: 'var(--gold)', fontWeight: 700 }}>
+              {submitted}
+            </div>
           </div>
-          <p className="text-sm text-[var(--muted)] leading-relaxed mb-6">
-            We&apos;ll review your quote request and respond within 1–2 working days with a formal quotation including shipping costs and payment terms.
+
+          <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.8, marginBottom: 20 }}>
+            We&apos;ll review your quote request and respond within <b style={{ color: '#fff' }}>1–2 working days</b> with a formal quotation including shipping costs and payment terms.
           </p>
-          <div className="flex gap-3 justify-center">
-            <Link href="/dashboard" className="btn-gold text-sm tracking-wider uppercase">
-              View My Quotes
-            </Link>
-            <Link href="/catalog" className="btn-outline text-sm tracking-wider uppercase">
-              Continue Shopping
-            </Link>
+
+          {/* What happens next */}
+          <div style={{
+            padding: 18, marginBottom: 20, textAlign: 'left' as const,
+            background: 'rgba(201,169,110,.04)', border: '1px solid rgba(201,169,110,.15)', borderRadius: 8,
+          }}>
+            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase' as const, color: 'var(--gold)', marginBottom: 12 }}>
+              What Happens Next
+            </div>
+            {[
+              { n: 1, t: 'Quote reviewed',         d: 'Our team checks availability and current lead times', done: true },
+              { n: 2, t: 'Formal quotation sent',  d: 'Within 1–2 working days with shipping & payment terms', done: false },
+              { n: 3, t: '50% deposit to confirm', d: 'Production begins once deposit is received',           done: false },
+            ].map(s => (
+              <div key={s.n} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600,
+                  background: s.done ? 'var(--gold)' : 'var(--surface)',
+                  color: s.done ? 'var(--dark)' : 'var(--muted)',
+                  border: s.done ? 'none' : '1px solid var(--border)',
+                }}>{s.n}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+                  <b style={{ color: '#fff' }}>{s.t}</b> — {s.d}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 24 }}>
+            Questions? Contact <b style={{ color: 'var(--gold)' }}>Navi Singh</b>
+            {' · '}trade@sivohome.com{' · '}+44 7346 325580
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <Link href="/dashboard" style={{
+              padding: '10px 24px', background: 'var(--gold)', color: 'var(--dark)',
+              borderRadius: 4, fontSize: 11, fontWeight: 700, letterSpacing: 1,
+              textDecoration: 'none', textTransform: 'uppercase' as const,
+            }}>View My Orders</Link>
+            <Link href="/catalog" style={{
+              padding: '10px 20px', border: '1px solid var(--border)', borderRadius: 4,
+              fontSize: 11, letterSpacing: 1, color: 'var(--muted)', textDecoration: 'none',
+              textTransform: 'uppercase' as const,
+            }}>Continue Shopping</Link>
           </div>
         </div>
       </div>
     )
   }
 
+  // ── BASKET SCREEN ──
   return (
     <div className="pt-[80px]">
       <section className="section">
@@ -151,47 +198,42 @@ export default function QuotePage() {
               <div className="text-5xl mb-4">🛒</div>
               <h2 className="font-serif text-2xl text-white mb-2">Your basket is empty</h2>
               <p className="text-sm text-[var(--muted)] mb-6">Add products from our collection to build your quote.</p>
-              <Link href="/catalog" className="btn-gold text-sm tracking-wider uppercase">
-                Browse Collection
-              </Link>
+              <Link href="/catalog" className="btn-gold text-sm tracking-wider uppercase">Browse Collection</Link>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8">
+
               {/* Items */}
               <div className="space-y-3">
                 {items.map(item => (
                   <div key={item.productId} className="card card-glow shimmer p-4 flex gap-4">
                     <div className="w-20 h-20 rounded bg-[var(--surface)] overflow-hidden shrink-0">
-                      {item.image ? (
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-2xl">🪑</div>
-                      )}
+                      {item.image
+                        ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center text-2xl">🪑</div>
+                      }
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm text-white font-medium">{item.name}</h3>
                       <div className="text-[10px] text-[var(--muted)]">
                         {item.sku} · {item.materials} · MOQ: {item.moq}
                       </div>
-                      <div className="text-sm text-[var(--gold)] mt-1">
-                        £{item.price.toLocaleString()} per unit
-                      </div>
+                      <div className="text-sm text-[var(--gold)] mt-1">£{item.price.toLocaleString()} per unit</div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <div className="flex items-center gap-1">
                         <button onClick={() => updateQty(item.productId, item.qty - 1)}
-                                className="w-7 h-7 border border-[var(--border)] rounded text-xs hover:border-[var(--gold)]">−</button>
+                          className="w-7 h-7 border border-[var(--border)] rounded text-xs hover:border-[var(--gold)]">−</button>
                         <input type="number" value={item.qty}
-                               onChange={(e) => updateQty(item.productId, parseInt(e.target.value) || item.moq)}
-                               className="w-14 h-7 bg-[var(--surface)] border border-[var(--border)] rounded text-center text-white text-xs" />
+                          onChange={(e) => updateQty(item.productId, parseInt(e.target.value) || item.moq)}
+                          className="w-14 h-7 bg-[var(--surface)] border border-[var(--border)] rounded text-center text-white text-xs" />
                         <button onClick={() => updateQty(item.productId, item.qty + 1)}
-                                className="w-7 h-7 border border-[var(--border)] rounded text-xs hover:border-[var(--gold)]">+</button>
+                          className="w-7 h-7 border border-[var(--border)] rounded text-xs hover:border-[var(--gold)]">+</button>
                       </div>
                       <div className="font-serif text-lg text-[var(--gold)]">
                         £{(item.price * item.qty).toLocaleString()}
                       </div>
-                      <button onClick={() => removeItem(item.productId)}
-                              className="text-[10px] text-red-400 hover:text-red-300">
+                      <button onClick={() => removeItem(item.productId)} className="text-[10px] text-red-400 hover:text-red-300">
                         Remove
                       </button>
                     </div>
@@ -203,7 +245,6 @@ export default function QuotePage() {
               <div>
                 <div className="card card-glow shimmer p-6 sticky top-[100px]">
                   <h3 className="font-serif text-lg text-white mb-4">Order Summary</h3>
-
                   <div className="space-y-2 mb-4">
                     {items.map(item => (
                       <div key={item.productId} className="flex justify-between text-xs">
@@ -212,9 +253,7 @@ export default function QuotePage() {
                       </div>
                     ))}
                   </div>
-
                   <hr className="border-[var(--border)] mb-4" />
-
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-sm text-[var(--muted)]">Subtotal</span>
                     <span className="font-serif text-2xl text-[var(--gold)]">£{totalPrice.toLocaleString()}</span>
@@ -222,8 +261,6 @@ export default function QuotePage() {
                   <div className="text-[10px] text-[var(--muted)] mb-4">
                     Shipping calculated in formal quote · 50% deposit to confirm
                   </div>
-
-                  {/* Notes */}
                   <div className="mb-4">
                     <label className="input-label">Notes (Optional)</label>
                     <textarea
@@ -234,22 +271,22 @@ export default function QuotePage() {
                       className="input-field text-xs"
                     />
                   </div>
-
                   {error && (
                     <div className="text-xs text-red-400 mb-3 p-2 bg-red-400/10 rounded">{error}</div>
                   )}
-
-                  <button onClick={handleSubmit}
-                          disabled={submitting}
-                          className="btn-gold w-full text-sm tracking-wider uppercase disabled:opacity-50">
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="btn-gold w-full text-sm tracking-wider uppercase disabled:opacity-50"
+                  >
                     {submitting ? 'Submitting...' : 'Submit Quote Request'}
                   </button>
-
                   <div className="text-[10px] text-[var(--muted)] text-center mt-3">
                     We&apos;ll respond within 1–2 working days
                   </div>
                 </div>
               </div>
+
             </div>
           )}
         </div>
