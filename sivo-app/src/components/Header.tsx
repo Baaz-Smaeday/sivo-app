@@ -62,7 +62,7 @@ export default function Header() {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [pathname])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60)
