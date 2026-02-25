@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import BackBar from '@/components/BackBar'
 
 export default function DashboardClient({
   profile,
@@ -125,6 +126,8 @@ export default function DashboardClient({
   })
 
   return (
+    <>
+    <BackBar currentLabel="My Account" />
     <div style={{ paddingTop: 80 }}>
 
       {/* Toast */}
@@ -683,5 +686,6 @@ export default function DashboardClient({
         </div>
       </section>
     </div>
+    </>
   )
 }
