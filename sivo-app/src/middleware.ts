@@ -48,7 +48,7 @@ export async function middleware(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (profile?.role !== 'admin') {
+    if (profile?.role !== 'admin' && profile?.role !== 'supplier') {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }
