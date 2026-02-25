@@ -23,6 +23,14 @@ export default function CatalogClient({ categories, products }: { categories: Ca
 
   useEffect(() => {
     const check = async () => {
+      // Check demo cookie first
+      const demoMatch = document.cookie.match(/sivo-demo-role=([^;]+)/)
+      const demoRole = demoMatch ? demoMatch[1] : ''
+      if (demoRole === 'buyer' || demoRole === 'admin' || demoRole === 'supplier') {
+        setCanSeePrice(true)
+        return
+      }
+      // Real auth check
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: profile } = await supabase.from('profiles').select('role, status').eq('id', user.id).single()
@@ -36,10 +44,9 @@ export default function CatalogClient({ categories, products }: { categories: Ca
   const getImg = (p: Product) => p.images?.find(i => i.is_primary)?.url || p.images?.[0]?.url || null
   const inBasket = (id: string) => basketItems.some(i => i.productId === id)
 
-  // Determine stock status from SKU pattern or random for demo
   const getStockType = (p: Product) => {
-    if (p.featured) return 'uk' // Featured items = in UK stock
-    return 'lead' // Default = 8-10 week lead
+    if (p.featured) return 'uk'
+    return 'lead'
   }
 
   return (
@@ -95,7 +102,6 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     ) : (
                       <div style={{ fontSize: 48, opacity: .3 }}>🪑</div>
                     )}
-                    {/* Badges overlay */}
                     <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, zIndex: 2 }}>
                       <span className="sivo-seal-badge">SIVO Verified</span>
                     </div>
