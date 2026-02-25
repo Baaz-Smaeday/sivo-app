@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --brand-bg: #141414;
+  --brand-surface: #1a1a1a;
+  --brand-card: #1e1e1e;
+  --brand-border: #2a2a2a;
+  --brand-gold: #c9a96e;
+  --brand-gold-light: #d4b87a;
+  --brand-text: #e5e5e5;
+  --brand-muted: #888888;
+}
+
+body {
+  background-color: var(--brand-bg);
+  color: var(--brand-text);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Gold button */
+.btn-gold {
+  @apply bg-brand-gold text-brand-bg font-semibold py-3 px-6 rounded transition-all duration-200;
+}
+.btn-gold:hover {
+  @apply bg-brand-gold-light;
+}
+
+/* Outline button */
+.btn-outline {
+  @apply border border-brand-border text-brand-text py-3 px-6 rounded transition-all duration-200;
+}
+.btn-outline:hover {
+  @apply border-brand-gold text-brand-gold;
+}
+
+/* Card */
+.card {
+  @apply bg-brand-card border border-brand-border rounded-lg;
+}
+
+/* Input fields */
+.input-field {
+  @apply w-full bg-brand-surface border border-brand-border text-brand-text rounded px-4 py-3 text-sm
+    focus:outline-none focus:border-brand-gold transition-colors duration-200;
+}
+
+.input-label {
+  @apply block text-[10px] font-semibold tracking-[1.5px] uppercase text-brand-muted mb-2;
+}
+
+/* Select */
+.select-field {
+  @apply w-full bg-brand-surface border border-brand-border text-brand-text rounded px-4 py-3 text-sm
+    focus:outline-none focus:border-brand-gold transition-colors duration-200 appearance-none;
+}
