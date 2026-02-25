@@ -37,16 +37,25 @@ export default function Header() {
   const { items, totalItems, setIsOpen: setBasketOpen } = useBasket()
 
   useEffect(() => {
+    const fetchProfile = async (userId: string, retries = 4): Promise<void> => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, role, status')
+        .eq('id', userId)
+        .single()
+      if (data) {
+        setProfile(data)
+      } else if (retries > 0) {
+        await new Promise(r => setTimeout(r, 500))
+        return fetchProfile(userId, retries - 1)
+      }
+    }
+
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUser(user)
-        const { data } = await supabase
-          .from('profiles')
-          .select('full_name, role, status')
-          .eq('id', user.id)
-          .single()
-        if (data) setProfile(data)
+        await fetchProfile(user.id)
       }
     }
     getUser()
@@ -54,7 +63,7 @@ export default function Header() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user)
-        getUser()
+        fetchProfile(session.user.id)
       } else {
         setUser(null)
         setProfile(null)
@@ -93,8 +102,8 @@ export default function Header() {
     : user?.email?.[0]?.toUpperCase() || '?'
 
   const displayName = profile?.full_name || 'Account'
-  const roleLabel = profile?.role === 'admin' ? 'ADMIN' : profile?.status === 'approved' ? 'TRADE' : 'PENDING'
-  const roleColor = profile?.role === 'admin' ? 'text-red-400' : profile?.status === 'approved' ? 'text-emerald-400' : 'text-yellow-400'
+  const roleLabel = profile?.role === 'admin' ? 'ADMIN' : profile?.role === 'supplier' ? 'SUPPLIER' : profile?.status === 'approved' ? 'TRADE' : 'PENDING'
+  const roleColor = profile?.role === 'admin' ? 'text-red-400' : profile?.role === 'supplier' ? 'text-emerald-400' : profile?.status === 'approved' ? 'text-emerald-400' : 'text-yellow-400'
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-[1000] py-3.5 transition-all duration-300 ${
@@ -159,7 +168,7 @@ export default function Header() {
               {dropdownOpen && (
                 <div className="absolute top-full right-0 mt-2 min-w-[180px] bg-[var(--card)] border border-[var(--border)] rounded-[var(--r)] shadow-[0_12px_40px_rgba(0,0,0,.5)] z-[100] animate-fade-up"
                      onClick={(e) => e.stopPropagation()}>
-                  {profile?.role === 'admin' && (
+                  {(profile?.role === 'admin' || profile?.role === 'supplier') && (
                     <Link href="/admin" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
                           onClick={() => setDropdownOpen(false)}>
                       📊 Admin Dashboard
