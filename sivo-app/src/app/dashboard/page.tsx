@@ -1,8 +1,45 @@
 import { createClient } from '@/lib/supabase-server'
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardClient from './DashboardClient'
 
+const DEMO_PROFILES: Record<string, any> = {
+  buyer: {
+    id: 'demo-buyer',
+    full_name: 'James Wilson',
+    email: 'buyer@demo.co.uk',
+    role: 'buyer',
+    status: 'approved',
+    company: { name: 'Wilson Interiors Ltd' },
+  },
+  admin: {
+    id: 'demo-admin',
+    full_name: 'Navi Singh',
+    email: 'admin@sivohome.com',
+    role: 'admin',
+    status: 'approved',
+    company: { name: 'SIVO HQ' },
+  },
+}
+
+export const revalidate = 0
+
 export default async function DashboardPage() {
+  // Check demo cookie first
+  const cookieStore = cookies()
+  const demoRole = cookieStore.get('sivo-demo-role')?.value
+
+  if (demoRole === 'buyer' || demoRole === 'admin') {
+    return (
+      <DashboardClient
+        profile={DEMO_PROFILES[demoRole]}
+        quotes={[]}
+        viewings={[]}
+      />
+    )
+  }
+
+  // Real Supabase auth check
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
