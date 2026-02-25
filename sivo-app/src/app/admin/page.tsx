@@ -16,33 +16,15 @@ export default async function AdminPage() {
     .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'admin' && profile?.role !== 'supplier') redirect('/dashboard')
+  if (profile?.role !== 'admin') redirect('/dashboard')
 
-  const { data: applications } = await supabase
-    .from('trade_applications')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('*, company:companies(name)')
-    .order('created_at', { ascending: false })
-
-  const { data: viewings } = await supabase
-    .from('viewing_requests')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  const { data: quotes } = await supabase
-    .from('quote_requests')
-    .select('*, profile:profiles(full_name, email), company:companies(name)')
-    .order('created_at', { ascending: false })
-
-  const { data: recentLogs } = await supabase
-    .from('audit_log')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(50)
+  const [applications, profiles, viewings, quotes, recentLogs] = await Promise.all([
+    supabase.from('trade_applications').select('*').order('created_at', { ascending: false }).then(r => r.data),
+    supabase.from('profiles').select('*, company:companies(name)').order('created_at', { ascending: false }).then(r => r.data),
+    supabase.from('viewing_requests').select('*').order('created_at', { ascending: false }).then(r => r.data),
+    supabase.from('quote_requests').select('*, profile:profiles(full_name, email), company:companies(name)').order('created_at', { ascending: false }).then(r => r.data),
+    supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(50).then(r => r.data),
+  ])
 
   return (
     <AdminClient
