@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase-browser'
 const CREDENTIALS: Record<string, { email: string; pass: string; redirect: string; label: string; icon: string; color: string }> = {
   admin:    { email: 'admin@sivohome.com',  pass: 'admin123',    redirect: '/admin',     label: 'Admin',    icon: '👑', color: '#c9a96e' },
   buyer:    { email: 'buyer@demo.co.uk',    pass: 'buyer123',    redirect: '/dashboard', label: 'Buyer',    icon: '🛒', color: '#4fc3f7' },
-  supplier: { email: 'supplier@demo.co.uk', pass: 'supplier123', redirect: '/admin',     label: 'Supplier', icon: '🏭', color: '#81c784' },
+  supplier: { email: 'supplier@demo.co.uk', pass: 'supplier123', redirect: '/supplier' ,     label: 'Supplier', icon: '🏭', color: '#81c784' },
 }
 
 export default function AutoLogin({ role }: { role: string }) {
