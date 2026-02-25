@@ -1,6 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { cookies } from 'next/headers'
 
 const CREDS: Record<string, { email: string; password: string; redirect: string }> = {
   admin:    { email: 'admin@sivohome.com',  password: 'admin123',    redirect: '/admin' },
@@ -14,15 +13,29 @@ export async function GET(request: NextRequest) {
 
   if (!acc) return NextResponse.redirect(new URL('/auth', request.url))
 
-  const cookieStore = cookies()
+  // Create the redirect response first
+  const response = NextResponse.redirect(new URL(acc.redirect, request.url))
+
+  // Clear ALL existing Supabase session cookies on the response
+  request.cookies.getAll().forEach(cookie => {
+    if (cookie.name.startsWith('sb-')) {
+      response.cookies.set(cookie.name, '', { maxAge: 0, path: '/' })
+    }
+  })
+
+  // Create Supabase client — cookies will be set directly on the response
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: () => {},
-        remove: () => {},
+        get: () => undefined, // Don't read existing session
+        set: (name, value, options) => {
+          response.cookies.set({ name, value, ...options })
+        },
+        remove: (name, options) => {
+          response.cookies.set({ name, value: '', ...options })
+        },
       },
     }
   )
@@ -33,38 +46,10 @@ export async function GET(request: NextRequest) {
   })
 
   if (error || !data.session) {
-    return NextResponse.redirect(new URL(`/auth?error=${encodeURIComponent(error?.message || 'Login failed')}`, request.url))
+    return NextResponse.redirect(
+      new URL(`/auth?error=${encodeURIComponent(error?.message || 'Login failed')}`, request.url)
+    )
   }
-
-  const response = NextResponse.redirect(new URL(acc.redirect, request.url))
-
-  const { access_token, refresh_token } = data.session
-  const isSecure = request.url.startsWith('https')
-
-  response.cookies.set('sb-access-token', access_token, {
-    httpOnly: true,
-    secure: isSecure,
-    sameSite: 'lax',
-    maxAge: 3600,
-    path: '/',
-  })
-
-  response.cookies.set('sb-refresh-token', refresh_token, {
-    httpOnly: true,
-    secure: isSecure,
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7,
-    path: '/',
-  })
-
-  const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL!.split('.')[0].split('//')[1]
-  response.cookies.set(`sb-${projectRef}-auth-token`, JSON.stringify(data.session), {
-    httpOnly: true,
-    secure: isSecure,
-    sameSite: 'lax',
-    maxAge: 3600,
-    path: '/',
-  })
 
   return response
 }
