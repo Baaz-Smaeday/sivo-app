@@ -3,20 +3,9 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase-browser'
+import BackBar from '@/components/BackBar'
 
 type ViewingType = 'virtual' | 'visit' | null
-
-function getDemoCookie(): string {
-  if (typeof document === 'undefined') return ''
-  const match = document.cookie.match(/sivo-demo-role=([^;]+)/)
-  return match ? match[1] : ''
-}
-
-const DEMO_PROFILE = {
-  full_name: 'James Wilson',
-  company: { name: 'Wilson Interiors Ltd' },
-  email: 'buyer@demo.co.uk',
-}
 
 export default function TradeViewingPage() {
   const [modalType, setModalType] = useState<ViewingType>(null)
@@ -31,12 +20,8 @@ export default function TradeViewingPage() {
   const supabase = createClient()
 
   const openModal = async (type: ViewingType) => {
-    // Allow demo users
-    const demoRole = getDemoCookie()
-    if (!demoRole) {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { window.location.href = '/auth?tab=login'; return }
-    }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { window.location.href = '/auth?tab=login'; return }
     setModalType(type)
     setStep(1)
     setRefId('')
@@ -52,17 +37,6 @@ export default function TradeViewingPage() {
 
     setLoading(true)
     try {
-      const demoRole = getDemoCookie()
-
-      if (demoRole) {
-        // Demo mode — skip Supabase, just show confirmation
-        await new Promise(r => setTimeout(r, 800))
-        setRefId(`SIVO-VIEW-DEMO-${Date.now().toString().slice(-4)}`)
-        setStep(2)
-        setLoading(false)
-        return
-      }
-
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/auth?tab=login'; return }
 
@@ -70,6 +44,7 @@ export default function TradeViewingPage() {
         .from('profiles').select('full_name, company:companies(name)')
         .eq('id', user.id).single()
 
+      // Get next ref ID
       let newRef = 'SIVO-VIEW-000001'
       try {
         const { data } = await supabase.rpc('next_viewing_ref')
@@ -107,6 +82,8 @@ export default function TradeViewingPage() {
   const isVisit = modalType === 'visit'
 
   return (
+    <>
+    <BackBar currentLabel="Trade Viewing" />
     <div style={{ paddingTop: 80 }}>
       <section style={{ padding: '48px 0 64px' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 20px' }}>
@@ -120,7 +97,7 @@ export default function TradeViewingPage() {
             </p>
           </div>
 
-          {/* Two Cards */}
+          {/* Two Cards - Virtual + In-Person */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, marginTop: 32 }}>
             {/* Virtual Viewing */}
             <div className="card card-glow shimmer" style={{ padding: 32 }}>
@@ -237,7 +214,7 @@ export default function TradeViewingPage() {
         </div>
       </section>
 
-      {/* BOOKING MODAL */}
+      {/* ═══════ BOOKING MODAL ═══════ */}
       {modalType && (
         <div onClick={closeModal} style={{
           position: 'fixed', inset: 0, zIndex: 6000,
@@ -249,6 +226,7 @@ export default function TradeViewingPage() {
             background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8,
             maxHeight: '85vh', overflowY: 'auto',
           }}>
+            {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h2 style={{ fontFamily: 'var(--font-serif, "Cormorant Garamond", serif)', fontSize: 22, color: '#fff', margin: 0 }}>
                 {step === 1 ? (isVisit ? 'Request In-Person Store Visit' : 'Request Virtual Viewing') : 'Request Confirmed'}
@@ -258,6 +236,7 @@ export default function TradeViewingPage() {
 
             {step === 1 ? (
               <>
+                {/* Type Badge */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                   <div style={{
                     width: 40, height: 40, borderRadius: '50%',
@@ -280,6 +259,7 @@ export default function TradeViewingPage() {
                   </div>
                 </div>
 
+                {/* Form */}
                 <div style={{ marginBottom: 16 }}>
                   <label style={labelStyle}>Preferred Date *</label>
                   <input type="date" value={form.preferredDate}
@@ -340,6 +320,7 @@ export default function TradeViewingPage() {
                 </button>
               </>
             ) : (
+              /* ═══ CONFIRMATION STEP ═══ */
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <div style={{
                   width: 56, height: 56, borderRadius: '50%', background: '#66bb6a',
@@ -355,6 +336,7 @@ export default function TradeViewingPage() {
                   }
                 </div>
 
+                {/* What Happens Next */}
                 <div style={{ padding: 16, marginBottom: 16, textAlign: 'left', background: 'rgba(201,169,110,.04)', border: '1px solid var(--border)', borderRadius: 8 }}>
                   <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 10 }}>What Happens Next</div>
                   <div style={{ display: 'grid', gap: 10 }}>
@@ -394,6 +376,7 @@ export default function TradeViewingPage() {
         </div>
       )}
     </div>
+    </>
   )
 }
 
