@@ -4,8 +4,8 @@ import AuthForm from './AuthForm'
 export default function AuthPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-[80vh] flex items-center justify-center">
-        <div className="text-brand-muted text-sm">Loading...</div>
+      <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}>
+        Loading...
       </div>
     }>
       <AuthForm />
