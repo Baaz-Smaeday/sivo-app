@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase-browser'
+import { useBasket } from '@/lib/basket'
 
 type Profile = {
   full_name: string | null
@@ -19,6 +20,7 @@ export default function HomeClient() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
   const supabase = createClient()
+  const { items } = useBasket()
 
   useEffect(() => {
     const load = async () => {
@@ -52,63 +54,45 @@ export default function HomeClient() {
   const isApproved = profile.status === 'approved'
   const isAdmin = profile.role === 'admin'
 
-  return (
-    <section className="py-5 border-b border-[var(--border)]" style={{ background: 'linear-gradient(135deg, rgba(201,169,110,.03), transparent)' }}>
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
-        {/* Top row: greeting + shipping countdown */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <div className="font-serif text-2xl text-white">
-              Welcome back, <em className="text-[var(--gold)]">{firstName}</em>
-            </div>
-            <div className="text-[11px] text-[var(--muted)] flex items-center gap-2 mt-1">
-              {company?.name || 'Your Company'} ·{' '}
-              {isApproved || isAdmin ? (
-                <span className="sivo-seal-badge">Approved Trade Account</span>
-              ) : (
-                <span className="sivo-seal-badge" style={{ borderColor: 'rgba(255,167,38,.3)', color: '#ffa726' }}>
-                  Pending Approval
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-3 items-center flex-wrap">
-            <div className="text-xs px-4 py-2 rounded-full" style={{
-              background: 'rgba(201,169,110,.08)',
-              border: '1px solid rgba(201,169,110,.2)',
-              color: 'var(--gold)'
-            }}>
-              🚢 Next shipment closes in{' '}
-              <span className="font-mono font-semibold">12</span>d{' '}
-              <span className="font-mono font-semibold">8</span>h
-            </div>
-            <Link href="/dashboard" className="btn-gold btn-sm text-xs tracking-wider uppercase">
-              View Trade Basket
-            </Link>
-          </div>
-        </div>
+  const actions = [
+    { icon: '📋', label: 'My Orders', href: '/dashboard' },
+    { icon: '🛒', label: `Quote Basket (${items.length})`, href: '/quote' },
+    { icon: '❤️', label: 'Saved (0)', href: '/catalog' },
+    { icon: '📅', label: 'Book Viewing', href: '/trade-viewing' },
+    { icon: '📦', label: 'Request Samples', href: '/sample-service' },
+    { icon: '🤝', label: 'Account Manager', href: null, sub: 'Reply within 24h' },
+  ]
 
+  return (
+    <section style={{
+      padding: '16px 0',
+      borderBottom: '1px solid var(--border)',
+      background: 'linear-gradient(135deg, rgba(201,169,110,.03), transparent)',
+    }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 16px' }}>
         {/* Quick action cards */}
-        <div className="flex gap-3 mt-4 overflow-x-auto pb-2">
-          {[
-            { icon: '📋', label: 'My Orders', href: '/dashboard' },
-            { icon: '🛒', label: 'Quote Basket', href: '/dashboard' },
-            { icon: '❤️', label: 'Saved', href: '/catalog' },
-            { icon: '📅', label: 'Book Viewing', href: '/trade-viewing' },
-            { icon: '📦', label: 'Request Samples', href: '/trade-viewing' },
-            { icon: '🤝', label: 'Account Manager', href: null },
-          ].map(item => (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, 1fr)',
+          gap: 10,
+          overflowX: 'auto',
+        }}>
+          {actions.map(item => (
             item.href ? (
-              <Link key={item.label} href={item.href}
-                    className="card card-glow shimmer card-glow p-4 flex-1 min-w-[140px] text-center cursor-pointer">
-                <div className="text-lg mb-1">{item.icon}</div>
-                <div className="text-[11px] text-[var(--gold)]">{item.label}</div>
+              <Link key={item.label} href={item.href} className="card card-glow shimmer"
+                style={{
+                  padding: '16px 12px', textAlign: 'center', textDecoration: 'none',
+                  display: 'block', minWidth: 130,
+                }}>
+                <div style={{ fontSize: 20, marginBottom: 4 }}>{item.icon}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt, #e0e0e0)', fontWeight: 500 }}>{item.label}</div>
               </Link>
             ) : (
-              <div key={item.label} className="card card-glow shimmer card-glow p-4 flex-1 min-w-[140px] text-center">
-                <div className="text-lg mb-1">{item.icon}</div>
-                <div className="text-[11px] text-[var(--gold)]">{item.label}</div>
-                <div className="text-[9px] text-[var(--muted)]">Reply within 24h</div>
+              <div key={item.label} className="card card-glow shimmer"
+                style={{ padding: '16px 12px', textAlign: 'center', minWidth: 130 }}>
+                <div style={{ fontSize: 20, marginBottom: 4 }}>{item.icon}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt, #e0e0e0)', fontWeight: 500 }}>{item.label}</div>
+                {item.sub && <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>{item.sub}</div>}
               </div>
             )
           ))}
