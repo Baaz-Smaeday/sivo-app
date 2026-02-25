@@ -19,9 +19,13 @@ export default function AutoLogin({ role }: { role: string }) {
     if (!acc) { setStatus('error'); setErrorMsg('Unknown role'); return }
     const run = async () => {
       try {
+        // Sign out any existing session first
+        await supabase.auth.signOut()
+        await new Promise(r => setTimeout(r, 300))
         const { error } = await supabase.auth.signInWithPassword({ email: acc.email, password: acc.pass })
         if (error) throw error
-        await new Promise(r => setTimeout(r, 800))
+        // Wait for session cookie to fully propagate
+        await new Promise(r => setTimeout(r, 1000))
         window.location.href = acc.redirect
       } catch (err: any) {
         setStatus('error')
