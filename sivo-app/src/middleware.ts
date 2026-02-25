@@ -60,6 +60,30 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Protect supplier routes
+  if (request.nextUrl.pathname.startsWith('/supplier')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/auth?tab=login', request.url))
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role !== 'supplier' && profile?.role !== 'admin') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+  }
+```
+
+Then on **line 67** change:
+```
+matcher: ['/admin/:path*', '/dashboard/:path*'],
+```
+to:
+```
+matcher: ['/admin/:path*', '/dashboard/:path*', '/supplier/:path*'],
   return response
 }
 
