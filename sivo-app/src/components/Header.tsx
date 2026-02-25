@@ -19,7 +19,7 @@ const NAV_LINKS = [
   { id: 'https://heyzine.com/flip-book/a486532728.html', label: '📖 Digital Catalogue', external: true },
   { id: '/material-guides', label: 'Material Guides' },
   { id: '/trade-viewing', label: 'Trade Viewing' },
-  { id: '/about', label: 'Why SIVO' },
+  { id: '/why-sivo', label: 'Why SIVO' },
   { id: '/how-to-order', label: 'How to Order' },
   { id: '/trade-terms', label: 'Trade Terms' },
   { id: '/about', label: 'About' },
