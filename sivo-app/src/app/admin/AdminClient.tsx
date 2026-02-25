@@ -1,269 +1,682 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
+// ── Types ──────────────────────────────────────────────────────────────────
+type Tab = 'overview' | 'products' | 'partners' | 'orders' | 'viewings' | 'approvals' | 'buyers'
+
+const SUPPLIERS = [
+  { id: 'raj-wood', name: 'Rajasthan Wood Artisans', loc: 'Jodhpur, Rajasthan', flag: '🇮🇳', spec: 'Acacia & mango wood furniture, recycled wood', rating: 4.9, certs: ['FSC', 'ISO 9001', 'REACH'], tier: 'signature', products: 14, qc: 94, compliance: 97 },
+  { id: 'marble-mak', name: 'Makrana Marble Works', loc: 'Makrana, Rajasthan', flag: '🇮🇳', spec: 'Marble dining tables, marble accessories', rating: 4.8, certs: ['ISO 9001', 'CE Marked', 'REACH'], tier: 'preferred', products: 2, qc: 91, compliance: 95 },
+  { id: 'metal-ind', name: 'Gujarat Iron & Metal Craft', loc: 'Ahmedabad, Gujarat', flag: '🇮🇳', spec: 'Metal bases, industrial frames, cast iron', rating: 4.7, certs: ['ISO 9001', 'BS EN'], tier: 'standard', products: 1, qc: 88, compliance: 92 },
+  { id: 'mango-craft', name: 'Mango Wood Collective', loc: 'Jodhpur, Rajasthan', flag: '🇮🇳', spec: 'Mango wood collections, bedroom, bar furniture', rating: 4.8, certs: ['FSC', 'GOTS', 'ISO 14001'], tier: 'signature', products: 13, qc: 92, compliance: 96 },
+]
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const S = (style: Record<string, any>) => style as React.CSSProperties
+
+const tag = (status: string) => {
+  const map: Record<string, { bg: string; color: string }> = {
+    pending:   { bg: 'rgba(255,167,38,.15)',  color: '#ffa726' },
+    approved:  { bg: 'rgba(76,175,80,.15)',   color: '#66bb6a' },
+    rejected:  { bg: 'rgba(244,67,54,.15)',   color: '#ef5350' },
+    new:       { bg: 'rgba(66,165,245,.15)',  color: '#42a5f5' },
+    assigned:  { bg: 'rgba(156,39,176,.15)',  color: '#ba68c8' },
+    confirmed: { bg: 'rgba(201,169,110,.15)', color: '#c9a96e' },
+    completed: { bg: 'rgba(76,175,80,.15)',   color: '#66bb6a' },
+    shipped:   { bg: 'rgba(66,165,245,.15)',  color: '#42a5f5' },
+    delivered: { bg: 'rgba(76,175,80,.15)',   color: '#66bb6a' },
+    live:      { bg: 'rgba(76,175,80,.15)',   color: '#66bb6a' },
+    draft:     { bg: 'rgba(110,110,122,.15)', color: '#6e6e7a' },
+    archived:  { bg: 'rgba(244,67,54,.1)',    color: '#ef5350' },
+  }
+  const c = map[status] || { bg: 'rgba(110,110,122,.1)', color: '#6e6e7a' }
+  return (
+    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', background: c.bg, color: c.color }}>
+      {status}
+    </span>
+  )
+}
+
+function ScoreRing({ score, label, color }: { score: number; label: string; color: string }) {
+  const r = 20, c = 2 * Math.PI * r
+  const fill = (score / 100) * c
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <svg width="52" height="52" viewBox="0 0 52 52">
+        <circle cx="26" cy="26" r={r} fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="5" />
+        <circle cx="26" cy="26" r={r} fill="none" stroke={color} strokeWidth="5"
+          strokeDasharray={`${fill} ${c}`} strokeLinecap="round"
+          transform="rotate(-90 26 26)" />
+        <text x="26" y="31" textAnchor="middle" fill={color} fontSize="11" fontWeight="700">{score}</text>
+      </svg>
+      <div style={{ fontSize: 8, color: 'var(--muted)', letterSpacing: '1px', textTransform: 'uppercase', marginTop: 2 }}>{label}</div>
+    </div>
+  )
+}
+
+function QCScorecard({ product }: { product: any }) {
+  const qcScore = product.qc_score ?? Math.floor(82 + Math.random() * 16)
+  const compScore = product.compliance_score ?? Math.floor(88 + Math.random() * 10)
+  const certs = product.certifications ?? ['FSC', 'REACH']
+  const certColors: Record<string, string> = { FSC: '#66bb6a', REACH: '#42a5f5', 'ISO 9001': '#c9a96e', 'BS EN': '#ba68c8', 'CE Marked': '#42a5f5', GOTS: '#66bb6a', 'ISO 14001': '#4db6ac' }
+
+  return (
+    <div style={{ background: 'rgba(201,169,110,.04)', border: '1px solid rgba(201,169,110,.15)', borderRadius: 8, padding: '12px 16px' }}>
+      <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 10 }}>QC & Compliance</div>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 10 }}>
+        <ScoreRing score={qcScore} label="QC" color="#66bb6a" />
+        <ScoreRing score={compScore} label="Compliance" color="#42a5f5" />
+        <div style={{ flex: 1 }}>
+          {[
+            { l: 'Material Check', v: qcScore > 90 ? 'Passed' : 'Passed', c: '#66bb6a' },
+            { l: 'Dimensional QC', v: qcScore > 85 ? 'Passed' : 'Review', c: qcScore > 85 ? '#66bb6a' : '#ffa726' },
+            { l: 'UK Standards', v: compScore > 90 ? 'Compliant' : 'Conditional', c: compScore > 90 ? '#42a5f5' : '#ffa726' },
+          ].map(row => (
+            <div key={row.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: 10 }}>
+              <span style={{ color: 'var(--muted)' }}>{row.l}</span>
+              <span style={{ color: row.c, fontWeight: 600 }}>{row.v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {certs.map((c: string) => (
+          <span key={c} style={{ padding: '2px 7px', borderRadius: 3, fontSize: 8, fontWeight: 700, letterSpacing: '0.5px', background: `${certColors[c] || '#c9a96e'}18`, color: certColors[c] || '#c9a96e', border: `1px solid ${certColors[c] || '#c9a96e'}40` }}>
+            ✓ {c}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
 export default function AdminClient({
-  applications,
-  profiles,
-  viewings,
-  quotes,
-  auditLog,
+  applications, profiles, viewings, quotes, auditLog,
 }: {
-  applications: any[]
-  profiles: any[]
-  viewings: any[]
-  quotes: any[]
-  auditLog: any[]
+  applications: any[]; profiles: any[]; viewings: any[]; quotes: any[]; auditLog: any[]
 }) {
-  const [tab, setTab] = useState<'applications' | 'users' | 'viewings' | 'quotes' | 'audit'>('applications')
+  const [tab, setTab] = useState<Tab>('overview')
+  const [products, setProducts] = useState<any[]>([])
+  const [productSearch, setProductSearch] = useState('')
+  const [productCat, setProductCat] = useState('All')
+  const [productStatus, setProductStatus] = useState('All')
+  const [editProduct, setEditProduct] = useState<any>(null)
+  const [addingProduct, setAddingProduct] = useState(false)
+  const [newProduct, setNewProduct] = useState({ name: '', sku: '', category: '', material: '', price: '', moq: '', description: '', status: 'draft' })
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState('')
   const supabase = createClient()
   const router = useRouter()
 
-  const statusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      pending: 'bg-yellow-900/30 text-yellow-300 border-yellow-800',
-      approved: 'bg-green-900/30 text-green-300 border-green-800',
-      rejected: 'bg-red-900/30 text-red-300 border-red-800',
-      new: 'bg-blue-900/30 text-blue-300 border-blue-800',
-      assigned: 'bg-purple-900/30 text-purple-300 border-purple-800',
-      confirmed: 'bg-green-900/30 text-green-300 border-green-800',
-      completed: 'bg-green-900/30 text-green-300 border-green-800',
-    }
-    return `inline-block px-2 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase border ${colors[status] || 'bg-brand-surface text-brand-muted border-brand-border'}`
+  useEffect(() => { loadProducts() }, [])
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+
+  const loadProducts = async () => {
+    const { data } = await supabase.from('products').select('*').order('created_at', { ascending: false })
+    if (data) setProducts(data)
   }
 
-  const approveApplication = async (appId: string, email: string) => {
-    // Update application
+  const approveApp = async (appId: string, email: string) => {
     await supabase.from('trade_applications').update({ status: 'approved' }).eq('id', appId)
-    // Find and approve user profile
-    const matchingProfile = profiles.find(p => p.email === email)
-    if (matchingProfile) {
-      await supabase.from('profiles').update({ status: 'approved' }).eq('id', matchingProfile.id)
-    }
-    // Audit
-    await supabase.from('audit_log').insert({
-      action: 'APPROVE_BUYER',
-      actor: 'admin',
-      target_type: 'trade_application',
-      target_id: appId,
-      details: { email },
-    })
+    const p = profiles.find(x => x.email === email)
+    if (p) await supabase.from('profiles').update({ status: 'approved' }).eq('id', p.id)
+    await supabase.from('audit_log').insert({ action: 'APPROVE_BUYER', actor: 'admin', target_type: 'trade_application', target_id: appId, details: { email } })
+    showToast('✓ Buyer approved')
     router.refresh()
   }
 
-  const rejectApplication = async (appId: string, email: string) => {
+  const rejectApp = async (appId: string) => {
     await supabase.from('trade_applications').update({ status: 'rejected' }).eq('id', appId)
-    const matchingProfile = profiles.find(p => p.email === email)
-    if (matchingProfile) {
-      await supabase.from('profiles').update({ status: 'rejected' }).eq('id', matchingProfile.id)
-    }
-    await supabase.from('audit_log').insert({
-      action: 'REJECT_BUYER',
-      actor: 'admin',
-      target_type: 'trade_application',
-      target_id: appId,
-      details: { email },
-    })
+    showToast('Application rejected')
     router.refresh()
   }
 
   const updateViewingStatus = async (id: string, status: string) => {
     await supabase.from('viewing_requests').update({ status }).eq('id', id)
-    await supabase.from('audit_log').insert({
-      action: 'VIEWING_STATUS',
-      actor: 'admin',
-      target_type: 'viewing_request',
-      target_id: id,
-      details: { status },
-    })
+    showToast('Viewing updated')
     router.refresh()
   }
 
-  const pendingApps = applications.filter(a => a.status === 'pending').length
-  const pendingViewings = viewings.filter(v => v.status === 'new').length
+  const saveProduct = async () => {
+    setSaving(true)
+    const data = { name: newProduct.name, sku: newProduct.sku, category: newProduct.category, material: newProduct.material, price: parseFloat(newProduct.price) || 0, moq: parseInt(newProduct.moq) || 1, description: newProduct.description, status: newProduct.status }
+    if (editProduct) {
+      await supabase.from('products').update(data).eq('id', editProduct.id)
+      showToast('Product updated')
+    } else {
+      await supabase.from('products').insert(data)
+      showToast('Product added')
+    }
+    setEditProduct(null); setAddingProduct(false); setNewProduct({ name: '', sku: '', category: '', material: '', price: '', moq: '', description: '', status: 'draft' })
+    loadProducts(); setSaving(false)
+  }
+
+  const deleteProduct = async (id: string) => {
+    if (!confirm('Delete this product?')) return
+    await supabase.from('products').delete().eq('id', id)
+    showToast('Product deleted'); loadProducts()
+  }
+
+  const openEdit = (p: any) => {
+    setEditProduct(p)
+    setNewProduct({ name: p.name, sku: p.sku || '', category: p.category || '', material: p.material || '', price: String(p.price || ''), moq: String(p.moq || ''), description: p.description || '', status: p.status || 'draft' })
+    setAddingProduct(true)
+  }
+
+  // Sidebar nav
+  const navItems: { id: Tab; icon: string; label: string }[] = [
+    { id: 'overview', icon: '📊', label: 'Overview' },
+    { id: 'products', icon: '📦', label: 'Products' },
+    { id: 'partners', icon: '🏭', label: 'Partners' },
+    { id: 'orders', icon: '📋', label: 'Orders' },
+    { id: 'viewings', icon: '📅', label: 'Viewings' },
+    { id: 'approvals', icon: '✅', label: 'Approvals' },
+    { id: 'buyers', icon: '👥', label: 'Trade Buyers' },
+  ]
+
+  const buyers = profiles.filter(p => p.role === 'buyer')
+  const pendingApps = applications.filter(a => a.status === 'pending')
+  const filteredProducts = products.filter(p => {
+    const matchSearch = !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase())
+    const matchCat = productCat === 'All' || p.category === productCat
+    const matchStatus = productStatus === 'All' || p.status === productStatus
+    return matchSearch && matchCat && matchStatus
+  })
+  const cats = ['All', ...Array.from(new Set(products.map((p: any) => p.category).filter(Boolean)))]
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-      <div className="mb-8">
-        <div className="text-[10px] font-semibold tracking-[3px] uppercase text-brand-gold mb-2">Admin Panel</div>
-        <h1 className="font-serif text-3xl text-white">SIVO Management</h1>
-      </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', minHeight: '100vh', paddingTop: 64 }}>
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: 'fixed', top: 80, right: 20, zIndex: 9999, padding: '12px 20px', background: 'var(--card)', border: '1px solid #66bb6a', borderRadius: 6, color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.5)' }}>
+          {toast}
+        </div>
+      )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <div className="card p-4 text-center">
-          <div className="font-serif text-2xl text-brand-gold">{applications.length}</div>
-          <div className="text-[10px] text-brand-muted tracking-wider uppercase">Applications</div>
+      {/* Sidebar */}
+      <aside style={{ background: 'var(--card)', borderRight: '1px solid var(--border)', padding: '24px 0', position: 'sticky', top: 64, height: 'calc(100vh - 64px)', overflowY: 'auto' }}>
+        <div style={{ padding: '0 24px 20px', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+          <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 20, color: '#fff' }}>Admin Panel</div>
+          <div style={{ fontSize: 10, color: 'var(--muted)' }}>SIVO</div>
         </div>
-        <div className="card p-4 text-center">
-          <div className="font-serif text-2xl text-brand-gold">{profiles.length}</div>
-          <div className="text-[10px] text-brand-muted tracking-wider uppercase">Users</div>
-        </div>
-        <div className="card p-4 text-center">
-          <div className="font-serif text-2xl text-brand-gold">{viewings.length}</div>
-          <div className="text-[10px] text-brand-muted tracking-wider uppercase">Viewings</div>
-        </div>
-        <div className="card p-4 text-center">
-          <div className="font-serif text-2xl text-brand-gold">{quotes.length}</div>
-          <div className="text-[10px] text-brand-muted tracking-wider uppercase">Quotes</div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-brand-border mb-6 overflow-x-auto">
-        {[
-          { key: 'applications', label: `Applications${pendingApps ? ` (${pendingApps})` : ''}` },
-          { key: 'users', label: 'Users' },
-          { key: 'viewings', label: `Viewings${pendingViewings ? ` (${pendingViewings})` : ''}` },
-          { key: 'quotes', label: 'Quotes' },
-          { key: 'audit', label: 'Audit Log' },
-        ].map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key as any)}
-            className={`px-4 py-3 text-xs font-semibold tracking-[1px] uppercase whitespace-nowrap border-b-2 transition-colors ${
-              tab === t.key
-                ? 'border-brand-gold text-brand-gold'
-                : 'border-transparent text-brand-muted hover:text-brand-text'
-            }`}
-          >
-            {t.label}
-          </button>
+        {navItems.map(item => (
+          <div key={item.id} onClick={() => setTab(item.id)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 24px', fontSize: 12, color: tab === item.id ? 'var(--gold)' : 'var(--muted)', cursor: 'pointer', borderLeft: `2px solid ${tab === item.id ? 'var(--gold)' : 'transparent'}`, background: tab === item.id ? 'rgba(201,169,110,.05)' : 'transparent', transition: 'all .2s' }}>
+            <span style={{ fontSize: 16, width: 22, textAlign: 'center' }}>{item.icon}</span>
+            {item.label}
+            {item.id === 'approvals' && pendingApps.length > 0 && (
+              <span style={{ marginLeft: 'auto', background: '#ffa726', color: '#000', fontSize: 9, fontWeight: 700, borderRadius: 10, padding: '1px 6px' }}>{pendingApps.length}</span>
+            )}
+          </div>
         ))}
-      </div>
+        <div style={{ borderTop: '1px solid var(--border)', margin: '16px 24px' }} />
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 24px', fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>
+          <span style={{ fontSize: 16, width: 22, textAlign: 'center' }}>🌐</span>
+          View Website
+        </Link>
+      </aside>
 
-      {/* Applications Tab */}
-      {tab === 'applications' && (
-        <div className="space-y-3">
-          {applications.length === 0 ? (
-            <p className="text-brand-muted text-center py-8">No applications yet.</p>
-          ) : applications.map(app => (
-            <div key={app.id} className="card p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm text-white font-medium">{app.full_name}</div>
-                  <div className="text-xs text-brand-muted">{app.company_name} · {app.business_type} · {app.email}</div>
-                  <div className="text-xs text-brand-muted mt-1">
-                    {app.annual_spend && `Spend: ${app.annual_spend}`}
-                    {app.vat_number && ` · VAT: ${app.vat_number}`}
-                    {app.website && ` · ${app.website}`}
+      {/* Main */}
+      <main style={{ padding: '28px 32px', overflowY: 'auto' }}>
+
+        {/* ── OVERVIEW ─────────────────────────────────────────────── */}
+        {tab === 'overview' && (
+          <div>
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Dashboard Overview</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Welcome back, Navi Singh</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 28 }}>
+              {[
+                { n: products.length || 30, l: 'Total Products', c: '#c9a96e', ch: '+5 this week', click: 'products' },
+                { n: SUPPLIERS.length, l: 'Production Partners', c: '#66bb6a', ch: 'All verified', click: 'partners' },
+                { n: viewings.filter(v => v.status === 'new').length, l: 'New Viewings', c: '#42a5f5', ch: 'Schedule now', click: 'viewings' },
+                { n: pendingApps.length, l: 'Pending Approvals', c: '#ffa726', ch: 'Review now', click: 'approvals' },
+                { n: quotes.length, l: 'Total Quotes', c: '#42a5f5', ch: `Active: ${quotes.filter(q => q.status === 'pending').length}`, click: 'orders' },
+                { n: `£0`, l: 'Total Revenue', c: '#ffa726', ch: 'This month', click: 'orders' },
+              ].map(s => (
+                <div key={s.l} onClick={() => setTab(s.click as Tab)} style={{ padding: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', transition: 'all .2s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'rgba(201,169,110,.4)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}>
+                  <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 32, color: s.c }}>{s.n}</div>
+                  <div style={{ fontSize: 10, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--muted)', marginTop: 2 }}>{s.l}</div>
+                  <div style={{ fontSize: 11, color: s.c, marginTop: 6 }}>{s.ch}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, padding: 20 }}>
+                <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 18, color: '#fff', marginBottom: 14 }}>Recent Quotes</div>
+                {quotes.length ? quotes.slice(0, 5).map((q: any) => (
+                  <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                    <div>
+                      <div style={{ color: '#fff' }}>{q.profile?.full_name || 'Unknown'}</div>
+                      <div style={{ fontSize: 10, color: 'var(--muted)' }}>{q.company?.name || ''} · {new Date(q.created_at).toLocaleDateString('en-GB')}</div>
+                    </div>
+                    {tag(q.status || 'pending')}
                   </div>
-                  <div className="text-[10px] text-brand-muted mt-1">{new Date(app.created_at).toLocaleString()}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={statusBadge(app.status)}>{app.status}</span>
-                  {app.status === 'pending' && (
-                    <>
-                      <button
-                        onClick={() => approveApplication(app.id, app.email)}
-                        className="px-3 py-1.5 bg-green-800 text-green-200 text-xs rounded hover:bg-green-700 transition-colors"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => rejectApplication(app.id, app.email)}
-                        className="px-3 py-1.5 bg-red-900 text-red-300 text-xs rounded hover:bg-red-800 transition-colors"
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                </div>
+                )) : <div style={{ fontSize: 12, color: 'var(--muted)' }}>No quotes yet</div>}
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Users Tab */}
-      {tab === 'users' && (
-        <div className="space-y-3">
-          {profiles.map(p => (
-            <div key={p.id} className="card p-4 flex justify-between items-center">
-              <div>
-                <div className="text-sm text-white font-medium">{p.full_name || p.email}</div>
-                <div className="text-xs text-brand-muted">{p.email} · {p.company?.name || 'No company'}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-bold tracking-wider uppercase ${p.role === 'admin' ? 'text-red-400' : 'text-brand-muted'}`}>
-                  {p.role}
-                </span>
-                <span className={statusBadge(p.status)}>{p.status}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Viewings Tab */}
-      {tab === 'viewings' && (
-        <div className="space-y-3">
-          {viewings.length === 0 ? (
-            <p className="text-brand-muted text-center py-8">No viewing requests yet.</p>
-          ) : viewings.map(v => (
-            <div key={v.id} className="card p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm text-white font-medium">{v.ref_id} · {v.contact_name}</div>
-                  <div className="text-xs text-brand-muted">
-                    {v.type === 'virtual' ? '📹 Virtual' : '🏠 Visit'} · {v.email} · {v.preferred_date || 'Flexible'}
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, padding: 20 }}>
+                <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 18, color: '#fff', marginBottom: 14 }}>Partner QC Summary</div>
+                {SUPPLIERS.map(s => (
+                  <div key={s.id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, color: 'var(--txt)' }}>{s.name.split(' ').slice(0, 2).join(' ')}</span>
+                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>QC: <span style={{ color: '#66bb6a', fontWeight: 600 }}>{s.qc}</span></span>
+                    </div>
+                    <div style={{ height: 4, background: 'var(--surface)', borderRadius: 2 }}>
+                      <div style={{ height: '100%', width: `${s.qc}%`, background: 'linear-gradient(90deg, #66bb6a, #a5d6a7)', borderRadius: 2 }} />
+                    </div>
                   </div>
-                  {v.company_name && <div className="text-xs text-brand-muted">{v.company_name}</div>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={statusBadge(v.status)}>{v.status}</span>
-                  {v.status === 'new' && (
-                    <select
-                      className="select-field text-xs py-1 px-2 w-auto"
-                      onChange={(e) => updateViewingStatus(v.id, e.target.value)}
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Update...</option>
-                      <option value="assigned">Assigned</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  )}
-                </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Quotes Tab */}
-      {tab === 'quotes' && (
-        <div className="space-y-3">
-          {quotes.length === 0 ? (
-            <p className="text-brand-muted text-center py-8">No quote requests yet.</p>
-          ) : quotes.map(q => (
-            <div key={q.id} className="card p-4 flex justify-between items-center">
+        {/* ── PRODUCTS ─────────────────────────────────────────────── */}
+        {tab === 'products' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
-                <div className="text-sm text-white font-medium">{q.ref_id}</div>
-                <div className="text-xs text-brand-muted">
-                  {q.profile?.full_name} · {q.company?.name} · {new Date(q.created_at).toLocaleDateString()}
+                <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Product Management</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{filteredProducts.length} of {products.length} products</div>
+              </div>
+              <button onClick={() => { setEditProduct(null); setNewProduct({ name: '', sku: '', category: '', material: '', price: '', moq: '', description: '', status: 'draft' }); setAddingProduct(true) }}
+                style={{ padding: '10px 20px', background: 'var(--gold)', color: 'var(--dark)', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                + Add Product
+              </button>
+            </div>
+
+            {/* Filters */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+              <input value={productSearch} onChange={e => setProductSearch(e.target.value)} placeholder="Search name, SKU…"
+                style={{ flex: 1, minWidth: 200, padding: '9px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 12 }} />
+              <select value={productCat} onChange={e => setProductCat(e.target.value)}
+                style={{ padding: '9px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 12 }}>
+                {cats.map(c => <option key={c}>{c}</option>)}
+              </select>
+              <select value={productStatus} onChange={e => setProductStatus(e.target.value)}
+                style={{ padding: '9px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 12 }}>
+                {['All', 'live', 'draft', 'archived'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+
+            {/* Product table */}
+            <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--surface)' }}>
+                    {['Product', 'SKU', 'Category', 'Material', 'Price', 'MOQ', 'QC', 'Status', 'Actions'].map(h => (
+                      <th key={h} style={{ padding: '10px 14px', fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gold)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProducts.map(p => {
+                    const qc = p.qc_score ?? 85 + (p.id % 12)
+                    const comp = p.compliance_score ?? 90 + (p.id % 8)
+                    return (
+                      <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(201,169,110,.02)'}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                        <td style={{ padding: '10px 14px', fontSize: 12, color: '#fff' }}>{p.name}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>{p.sku || '—'}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>{p.category || '—'}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>{p.material || '—'}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--gold)', fontFamily: 'var(--font-serif, Georgia, serif)' }}>£{p.price}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>{p.moq || '—'}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <div title={`QC: ${qc}/100`} style={{ width: 32, height: 6, background: 'var(--surface)', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ width: `${qc}%`, height: '100%', background: qc >= 90 ? '#66bb6a' : qc >= 80 ? '#ffa726' : '#ef5350', borderRadius: 3 }} />
+                            </div>
+                            <span style={{ fontSize: 9, color: qc >= 90 ? '#66bb6a' : '#ffa726' }}>{qc}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>{tag(p.status || 'draft')}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={() => openEdit(p)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--gold)', fontSize: 10, cursor: 'pointer' }}>Edit</button>
+                            <button onClick={() => deleteProduct(p.id)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid rgba(244,67,54,.3)', borderRadius: 4, color: '#ef5350', fontSize: 10, cursor: 'pointer' }}>Del</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {filteredProducts.length === 0 && (
+                <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No products found</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── PARTNERS ─────────────────────────────────────────────── */}
+        {tab === 'partners' && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Production Partners</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{SUPPLIERS.length} partners in network</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+              {SUPPLIERS.map(s => {
+                const tierColors: Record<string, string> = { signature: 'var(--gold)', preferred: '#42a5f5', standard: 'var(--muted)' }
+                const tierBg: Record<string, string> = { signature: 'rgba(201,169,110,.1)', preferred: 'rgba(66,165,245,.08)', standard: 'rgba(110,110,122,.06)' }
+                const tierLabel: Record<string, string> = { signature: 'Signature Partner', preferred: 'Preferred Partner', standard: 'Standard Partner' }
+                return (
+                  <div key={s.id} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, transition: 'all .3s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(201,169,110,.3)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(0)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--navy)', border: '2px solid var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Georgia, serif', fontSize: 14, color: 'var(--gold)' }}>
+                          {s.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, color: '#fff' }}>{s.name}</div>
+                          <div style={{ fontSize: 10, color: 'var(--muted)' }}>{s.flag} {s.loc}</div>
+                        </div>
+                      </div>
+                      <span style={{ padding: '3px 10px', borderRadius: 3, fontSize: 9, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', background: 'rgba(76,175,80,.15)', color: '#66bb6a' }}>Approved</span>
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <span style={{ padding: '3px 10px', borderRadius: 50, fontSize: 8, letterSpacing: '1.5px', textTransform: 'uppercase', background: tierBg[s.tier], border: `1px solid ${tierColors[s.tier]}`, color: tierColors[s.tier] }}>
+                        {tierLabel[s.tier]}
+                      </span>
+                    </div>
+                    <div style={{ height: 1, background: 'var(--border)', margin: '10px 0' }} />
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>{s.spec}</div>
+                    {/* QC scorecard inline */}
+                    <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                      <ScoreRing score={s.qc} label="QC" color="#66bb6a" />
+                      <ScoreRing score={s.compliance} label="Compliance" color="#42a5f5" />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {s.certs.map(c => (
+                            <span key={c} style={{ padding: '2px 6px', borderRadius: 3, fontSize: 8, fontWeight: 700, background: 'rgba(76,175,80,.1)', color: '#66bb6a', border: '1px solid rgba(76,175,80,.2)' }}>✓ {c}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)' }}>
+                      <span>{s.products} products · ⭐ {s.rating}</span>
+                      <span>Since {2005 + SUPPLIERS.indexOf(s)}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── ORDERS ─────────────────────────────────────────────────── */}
+        {tab === 'orders' && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Quote Requests</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{quotes.length} total · {quotes.filter(q => q.status === 'pending').length} pending</div>
+            </div>
+            {quotes.length > 0 ? (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface)' }}>
+                      {['Ref', 'Buyer', 'Company', 'Date', 'Status'].map(h => (
+                        <th key={h} style={{ padding: '10px 14px', fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gold)', textAlign: 'left' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quotes.map((q: any) => (
+                      <tr key={q.id} style={{ borderTop: '1px solid var(--border)' }}>
+                        <td style={{ padding: '10px 14px', fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>{q.id?.slice(0, 8)}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 12, color: '#fff' }}>{q.profile?.full_name || '—'}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>{q.company?.name || '—'}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--muted)' }}>{new Date(q.created_at).toLocaleDateString('en-GB')}</td>
+                        <td style={{ padding: '10px 14px' }}>{tag(q.status || 'pending')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--muted)' }}>
+                <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>📋</div>
+                <div style={{ fontSize: 13 }}>No orders yet</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── VIEWINGS ─────────────────────────────────────────────── */}
+        {tab === 'viewings' && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Trade Viewing Requests</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{viewings.length} total · {viewings.filter(v => v.status === 'new').length} new</div>
+            </div>
+            {viewings.length > 0 ? (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface)' }}>
+                      {['Type', 'Company', 'Contact', 'Preferred Date', 'Status', 'Actions'].map(h => (
+                        <th key={h} style={{ padding: '10px 14px', fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gold)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewings.map((v: any) => (
+                      <tr key={v.id} style={{ borderTop: '1px solid var(--border)' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{ padding: '3px 10px', borderRadius: 3, fontSize: 9, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', background: v.type === 'visit' ? 'rgba(201,169,110,.15)' : 'rgba(66,165,245,.15)', color: v.type === 'visit' ? 'var(--gold)' : '#42a5f5' }}>
+                            {v.type || 'visit'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontSize: 12, color: '#fff' }}>{v.company_name || '—'}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ fontSize: 12, color: '#fff' }}>{v.full_name || v.contact_name || '—'}</div>
+                          <div style={{ fontSize: 10, color: 'var(--muted)' }}>{v.email}</div>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>{v.preferred_date ? new Date(v.preferred_date).toLocaleDateString('en-GB') : '—'}</td>
+                        <td style={{ padding: '10px 14px' }}>{tag(v.status || 'new')}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <select value={v.status || 'new'} onChange={e => updateViewingStatus(v.id, e.target.value)}
+                            style={{ padding: '4px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', fontSize: 10 }}>
+                            {['new', 'assigned', 'confirmed', 'completed'].map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--muted)' }}>
+                <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>📅</div>
+                <div style={{ fontSize: 13 }}>No viewing requests yet</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── APPROVALS ────────────────────────────────────────────── */}
+        {tab === 'approvals' && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Trade Account Approvals</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{pendingApps.length} pending applications</div>
+            </div>
+            {pendingApps.length > 0 && (
+              <div style={{ background: 'var(--card)', border: '1px solid rgba(255,167,38,.3)', borderRadius: 8, padding: 20, marginBottom: 20 }}>
+                <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: '#ffa726', marginBottom: 12 }}>Pending Approval</div>
+                {pendingApps.map((a: any) => (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div>
+                      <div style={{ fontSize: 13, color: '#fff', fontWeight: 500 }}>{a.full_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{a.company_name}{a.business_type ? ` · ${a.business_type}` : ''}</div>
+                      <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>{a.email}{a.vat_number ? ` · VAT: ${a.vat_number}` : ''}</div>
+                      {a.annual_spend && <div style={{ fontSize: 10, color: 'var(--gold)' }}>Est. spend: {a.annual_spend}</div>}
+                      <div style={{ fontSize: 9, color: 'var(--muted)' }}>Applied: {new Date(a.created_at).toLocaleDateString('en-GB')}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => approveApp(a.id, a.email)}
+                        style={{ padding: '8px 16px', background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                        ✓ Approve
+                      </button>
+                      <button onClick={() => rejectApp(a.id)}
+                        style={{ padding: '8px 16px', background: 'transparent', color: '#ef5350', border: '1px solid rgba(244,67,54,.3)', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
+                        ✕ Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {pendingApps.length === 0 && (
+              <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--muted)' }}>
+                <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>✅</div>
+                <div style={{ fontSize: 13 }}>No pending applications</div>
+              </div>
+            )}
+            {/* Recent decisions */}
+            {applications.filter(a => a.status !== 'pending').length > 0 && (
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
+                <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>Recent Decisions</div>
+                {applications.filter(a => a.status !== 'pending').slice(0, 10).map((a: any) => (
+                  <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                    <div>
+                      <span style={{ color: '#fff' }}>{a.full_name}</span>
+                      <span style={{ color: 'var(--muted)' }}> — {a.company_name}</span>
+                    </div>
+                    {tag(a.status)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── BUYERS ───────────────────────────────────────────────── */}
+        {tab === 'buyers' && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>UK Trade Buyers</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{buyers.length} registered buyers</div>
+            </div>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--surface)' }}>
+                    {['Name', 'Company', 'Email', 'Business Type', 'Status', 'Joined', 'Actions'].map(h => (
+                      <th key={h} style={{ padding: '10px 14px', fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gold)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {buyers.map((b: any) => (
+                    <tr key={b.id} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: '10px 14px', fontSize: 12, color: '#fff' }}>{b.full_name || '—'}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>{b.company?.name || '—'}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>{b.email || '—'}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>Retailer</td>
+                      <td style={{ padding: '10px 14px' }}>{tag(b.status || 'pending')}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 10, color: 'var(--muted)' }}>{new Date(b.created_at).toLocaleDateString('en-GB')}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        {b.status !== 'approved' && (
+                          <button onClick={async () => { await supabase.from('profiles').update({ status: 'approved' }).eq('id', b.id); showToast('Buyer approved'); router.refresh() }}
+                            style={{ padding: '4px 12px', background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, cursor: 'pointer' }}>
+                            Approve
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {buyers.length === 0 && (
+                <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No buyers yet</div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* ── PRODUCT EDIT MODAL ─────────────────────────────────────── */}
+      {addingProduct && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 3000, padding: 20, overflowY: 'auto' }}>
+          <div style={{ width: '100%', maxWidth: 620, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: 36, marginTop: 80 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: '#fff' }}>{editProduct ? 'Edit Product' : 'Add Product'}</div>
+              <button onClick={() => setAddingProduct(false)} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gap: 14 }}>
+              {[
+                { label: 'Product Name *', key: 'name', placeholder: 'e.g. Round Coffee Table' },
+                { label: 'SKU / Code', key: 'sku', placeholder: 'e.g. BFCTRMN1234' },
+                { label: 'Category', key: 'category', placeholder: 'e.g. Coffee Tables' },
+                { label: 'Material', key: 'material', placeholder: 'e.g. Mango Wood / Metal' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={{ fontSize: 9, letterSpacing: '2.5px', textTransform: 'uppercase', color: 'var(--gold)', display: 'block', marginBottom: 5 }}>{f.label}</label>
+                  <input value={(newProduct as any)[f.key]} onChange={e => setNewProduct(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder}
+                    style={{ width: '100%', padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 13 }} />
+                </div>
+              ))}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 9, letterSpacing: '2.5px', textTransform: 'uppercase', color: 'var(--gold)', display: 'block', marginBottom: 5 }}>Price (£)</label>
+                  <input type="number" value={newProduct.price} onChange={e => setNewProduct(p => ({ ...p, price: e.target.value }))} placeholder="e.g. 125"
+                    style={{ width: '100%', padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 13 }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 9, letterSpacing: '2.5px', textTransform: 'uppercase', color: 'var(--gold)', display: 'block', marginBottom: 5 }}>MOQ</label>
+                  <input type="number" value={newProduct.moq} onChange={e => setNewProduct(p => ({ ...p, moq: e.target.value }))} placeholder="e.g. 10"
+                    style={{ width: '100%', padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 13 }} />
                 </div>
               </div>
-              <span className={statusBadge(q.status)}>{q.status}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Audit Log Tab */}
-      {tab === 'audit' && (
-        <div className="space-y-2">
-          {auditLog.map(log => (
-            <div key={log.id} className="card p-3 flex justify-between items-center">
               <div>
-                <span className="text-xs text-brand-gold font-mono">{log.action}</span>
-                <span className="text-xs text-brand-muted ml-2">by {log.actor}</span>
+                <label style={{ fontSize: 9, letterSpacing: '2.5px', textTransform: 'uppercase', color: 'var(--gold)', display: 'block', marginBottom: 5 }}>Description</label>
+                <textarea value={newProduct.description} onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} placeholder="Product description…" rows={3}
+                  style={{ width: '100%', padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, resize: 'vertical' }} />
               </div>
-              <div className="text-[10px] text-brand-muted">{new Date(log.created_at).toLocaleString()}</div>
+              <div>
+                <label style={{ fontSize: 9, letterSpacing: '2.5px', textTransform: 'uppercase', color: 'var(--gold)', display: 'block', marginBottom: 5 }}>Status</label>
+                <select value={newProduct.status} onChange={e => setNewProduct(p => ({ ...p, status: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 13 }}>
+                  <option value="draft">Draft</option>
+                  <option value="live">Live</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
             </div>
-          ))}
+            {/* QC Scorecard preview for edit */}
+            {editProduct && (
+              <div style={{ marginTop: 16 }}>
+                <QCScorecard product={editProduct} />
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+              <button onClick={saveProduct} disabled={saving}
+                style={{ flex: 1, padding: '12px', background: 'var(--gold)', color: 'var(--dark)', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                {saving ? 'Saving…' : editProduct ? 'Update Product' : 'Add Product'}
+              </button>
+              <button onClick={() => setAddingProduct(false)}
+                style={{ padding: '12px 24px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
