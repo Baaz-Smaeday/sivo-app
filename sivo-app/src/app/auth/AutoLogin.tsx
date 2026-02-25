@@ -21,7 +21,6 @@ export default function AutoLogin({ role }: { role: string }) {
       try {
         const { error } = await supabase.auth.signInWithPassword({ email: acc.email, password: acc.pass })
         if (error) throw error
-        // Wait for session cookie to fully propagate before hard redirect
         await new Promise(r => setTimeout(r, 800))
         window.location.href = acc.redirect
       } catch (err: any) {
