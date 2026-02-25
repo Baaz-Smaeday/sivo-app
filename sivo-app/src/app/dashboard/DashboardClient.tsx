@@ -18,6 +18,7 @@ export default function DashboardClient({
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState('')
   const [savedCount, setSavedCount] = useState(0)
+  const [demoOrders, setDemoOrders] = useState<any[]>([])
   const [toast, setToast] = useState('')
   const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'purchaser' })
   const fileRef = useRef<HTMLInputElement>(null)
@@ -38,9 +39,11 @@ export default function DashboardClient({
       const logo = localStorage.getItem('sivo_company_logo') || ''
       const name = localStorage.getItem('sivo_company_name') || ''
       const saved = JSON.parse(localStorage.getItem('sivo_saved') || '[]')
+      const demoOrd = JSON.parse(localStorage.getItem('sivo_demo_orders') || '[]')
       setCompanyLogo(logo)
       setCompanyDisplayName(name)
       setSavedCount(saved.length)
+      setDemoOrders(demoOrd)
       setNameInput(name || profile?.company?.name || '')
     } catch {}
 
@@ -100,7 +103,8 @@ export default function DashboardClient({
   }
 
   const stages = ['Order Placed', 'In Production', 'QC Inspection', 'Shipping', 'UK Delivery']
-  const currentStage = quotes.length > 0 ? 1 : 0
+  const currentStage = (quotes.length + demoOrders.length) > 0 ? 1 : 0
+  const allOrders = [...demoOrders.map(o => ({ ...o, _demo: true })), ...quotes]
   const hasActive = quotes.some((q: any) => ['confirmed', 'approved'].includes(q.status))
 
   const viewingProgress = (status: string) => ({ new: 25, assigned: 50, confirmed: 75, completed: 100 }[status] || 25)
@@ -226,7 +230,7 @@ export default function DashboardClient({
               )}
               <div style={{ display: 'flex', gap: 16 }}>
                 {[
-                  { label: 'Orders', value: quotes.length },
+                  { label: 'Orders', value: allOrders.length },
                   { label: 'Saved', value: savedCount },
                   { label: 'Viewings', value: viewings.length },
                 ].map(s => (
@@ -370,7 +374,7 @@ export default function DashboardClient({
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: '#fff', margin: '24px 0 12px' }}>
                 Order History
               </div>
-              {quotes.length === 0 ? (
+              {allOrders.length === 0 ? (
                 <div style={{ ...card(), textAlign: 'center' as const, padding: 48 }}>
                   <div style={{ fontSize: 48, marginBottom: 12, opacity: .2 }}>📋</div>
                   <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>No orders yet.</div>
@@ -382,12 +386,13 @@ export default function DashboardClient({
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-                  {quotes.map((q: any) => (
+                  {allOrders.map((q: any) => (
                     <div key={q.id} style={card()}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                         <div>
                           <span style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: '#fff' }}>
-                            {q.ref_id || `Quote #${q.id.slice(0, 8)}`}
+                            {q.ref_id || `Quote #${q.id?.slice(0, 8)}`}
+                            {q._demo && <span style={{ marginLeft: 8, fontSize: 8, padding: '1px 5px', background: 'rgba(66,165,245,.15)', color: '#42a5f5', borderRadius: 3, border: '1px solid rgba(66,165,245,.3)', verticalAlign: 'middle' }}>DEMO</span>}
                           </span>
                           <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 10 }}>
                             {new Date(q.created_at).toLocaleDateString('en-GB')}
@@ -395,20 +400,28 @@ export default function DashboardClient({
                         </div>
                         {statusTag(q.status)}
                       </div>
-                      {q.items?.map((item: any, idx: number) => (
+                      {q.items?.map((item: any, idx: number) => {
+                        // Demo items: { name, sku, qty, line_total }
+                        // Real items: { product: { name, sku }, quantity, unit_price }
+                        const name = item.name || item.product?.name || 'Product'
+                        const sku = item.sku || item.product?.sku || '—'
+                        const qty = item.qty || item.quantity || 0
+                        const total = item.line_total ?? (item.unit_price * item.quantity) ?? 0
+                        return (
                         <div key={idx} style={{
                           display: 'flex', justifyContent: 'space-between',
                           padding: '6px 0', borderTop: '1px solid var(--border)',
                         }}>
                           <span style={{ fontSize: 12, color: '#fff' }}>
-                            {item.product?.name || 'Product'}{' '}
-                            <span style={{ color: 'var(--muted)' }}>({item.product?.sku || '—'})</span>
+                            {name}{' '}
+                            <span style={{ color: 'var(--muted)' }}>({sku})</span>
                           </span>
                           <span style={{ fontSize: 12, color: 'var(--gold)' }}>
-                            ×{item.quantity} · £{(item.unit_price * item.quantity).toLocaleString()}
+                            ×{qty} · £{total.toLocaleString()}
                           </span>
                         </div>
-                      ))}
+                        )
+                      })}
                       <div style={{
                         display: 'flex', justifyContent: 'flex-end',
                         paddingTop: 8, borderTop: '1px solid var(--border)', marginTop: 4,
