@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.redirect(new URL(acc.redirect, request.url))
 
-  // Set session cookies directly on the response
   const { access_token, refresh_token } = data.session
   const isSecure = request.url.startsWith('https')
 
@@ -58,10 +57,14 @@ export async function GET(request: NextRequest) {
     path: '/',
   })
 
-  // Also set the Supabase auth token cookie (format varies by project)
   const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL!.split('.')[0].split('//')[1]
   response.cookies.set(`sb-${projectRef}-auth-token`, JSON.stringify(data.session), {
     httpOnly: true,
     secure: isSecure,
     sameSite: 'lax',
     maxAge: 3600,
+    path: '/',
+  })
+
+  return response
+}
