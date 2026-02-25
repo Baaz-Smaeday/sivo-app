@@ -3,6 +3,8 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BasketDrawer from "@/components/BasketDrawer";
+import FloatingQuoteBar from "@/components/FloatingQuoteBar";
+import QuickContact from "@/components/QuickContact";
 import { BasketProvider } from "@/lib/basket";
 
 export const metadata: Metadata = {
@@ -32,6 +34,8 @@ export default function RootLayout({
           </main>
           <Footer />
           <BasketDrawer />
+          <FloatingQuoteBar />
+          <QuickContact />
         </BasketProvider>
       </body>
     </html>
