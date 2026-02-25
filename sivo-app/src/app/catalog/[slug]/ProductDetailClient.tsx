@@ -113,6 +113,14 @@ export default function ProductDetailClient({ product, related }: { product: any
 
   useEffect(() => {
     const checkAccess = async () => {
+      // Check demo cookie first
+      const match = document.cookie.match(/sivo-demo-role=([^;]+)/)
+      const demoRole = match ? match[1] : ''
+      if (demoRole === 'buyer' || demoRole === 'admin') {
+        setCanSeePrice(true)
+        return
+      }
+      // Fall back to Supabase auth
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: profile } = await supabase
