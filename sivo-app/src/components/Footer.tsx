@@ -28,7 +28,8 @@ export default function Footer() {
                 <Link href="/catalog" className="block text-sm text-[var(--txt)] hover:text-[var(--gold)] transition-colors">Collection</Link>
                 <Link href="/collections" className="block text-sm text-[var(--txt)] hover:text-[var(--gold)] transition-colors">Signature Collections</Link>
                 <Link href="/material-guides" className="block text-sm text-[var(--txt)] hover:text-[var(--gold)] transition-colors">Material Guides</Link>
-                <Link href="/about" className="block text-sm text-[var(--txt)] hover:text-[var(--gold)] transition-colors">Why SIVO</Link>
+                <Link href="/why-sivo" className="block text-sm text-[var(--txt)] hover:text-[var(--gold)] transition-colors">Why SIVO</Link>
+                <Link href="/about" className="block text-sm text-[var(--txt)] hover:text-[var(--gold)] transition-colors">About Us</Link>
                 <Link href="/portfolio" className="block text-sm text-[var(--txt)] hover:text-[var(--gold)] transition-colors">Portfolio</Link>
                 <Link href="/faq" className="block text-sm text-[var(--txt)] hover:text-[var(--gold)] transition-colors">FAQ</Link>
               </div>
