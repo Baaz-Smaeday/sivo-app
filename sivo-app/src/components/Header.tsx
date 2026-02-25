@@ -20,9 +20,9 @@ type DemoUser = {
 }
 
 const DEMO_USERS: Record<string, DemoUser> = {
-  admin:    { name: 'Navi Singh',    role: 'admin',    status: 'approved', redirect: '/admin' },
-  buyer:    { name: 'James Wilson',  role: 'buyer',    status: 'approved', redirect: '/dashboard' },
-  supplier: { name: 'Raj Patel',     role: 'supplier', status: 'approved', redirect: '/supplier' },
+  admin:    { name: 'Navi Singh',   role: 'admin',    status: 'approved', redirect: '/admin' },
+  buyer:    { name: 'James Wilson', role: 'buyer',    status: 'approved', redirect: '/dashboard' },
+  supplier: { name: 'Raj Patel',    role: 'supplier', status: 'approved', redirect: '/supplier' },
 }
 
 const NAV_LINKS = [
@@ -64,7 +64,6 @@ export default function Header() {
   const { items, totalItems, setIsOpen: setBasketOpen } = useBasket()
 
   useEffect(() => {
-    // Check demo cookie
     const role = getDemoCookie()
     if (role) setDemoRole(role)
 
@@ -104,7 +103,6 @@ export default function Header() {
   }, [dropdownOpen, loginDropdownOpen, mobileOpen])
 
   const handleSignOut = async () => {
-    // Clear demo cookie
     document.cookie = 'sivo-demo-role=; max-age=0; path=/'
     setDemoRole('')
     await supabase.auth.signOut()
@@ -114,17 +112,14 @@ export default function Header() {
     window.location.href = '/'
   }
 
-  // Determine display info — demo takes priority
   const demo = demoRole ? DEMO_USERS[demoRole] : null
   const isLoggedIn = !!(user || demo)
-
   const displayRole = demo?.role || profile?.role || ''
   const displayName = demo?.name || profile?.full_name || 'Account'
   const displayStatus = demo?.status || profile?.status || ''
-
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
   const roleLabel = displayRole === 'admin' ? 'ADMIN' : displayRole === 'supplier' ? 'SUPPLIER' : displayStatus === 'approved' ? 'TRADE' : 'PENDING'
-  const roleColor = displayRole === 'admin' ? 'text-red-400' : displayRole === 'supplier' ? 'text-emerald-400' : displayStatus === 'approved' ? 'text-emerald-400' : 'text-yellow-400'
+  const roleColor = displayRole === 'admin' ? 'text-[#c9a96e]' : displayRole === 'supplier' ? 'text-emerald-400' : displayStatus === 'approved' ? 'text-emerald-400' : 'text-yellow-400'
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-[1000] py-3.5 transition-all duration-300 ${
@@ -160,6 +155,7 @@ export default function Header() {
 
         {/* Right Side */}
         <div className="flex items-center gap-3 shrink-0">
+
           {/* Quote Basket */}
           <button onClick={() => setBasketOpen(true)}
             className="flex items-center gap-1.5 py-1.5 px-3 border border-[var(--border)] rounded transition-all hover:border-[var(--gold)] relative">
@@ -173,8 +169,10 @@ export default function Header() {
           </button>
 
           {isLoggedIn ? (
+            /* ── LOGGED IN ── */
             <div className="relative">
-              <div className="flex items-center gap-2 py-1.5 px-3 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r)] cursor-pointer transition-all hover:border-[var(--gold)]"
+              <div
+                className="flex items-center gap-2 py-1.5 px-3 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r)] cursor-pointer transition-all hover:border-[var(--gold)]"
                 onClick={(e) => { e.stopPropagation(); setDropdownOpen(!dropdownOpen) }}>
                 <div className="w-[26px] h-[26px] rounded-full bg-[var(--gold)] text-[var(--dark)] flex items-center justify-center text-[10px] font-semibold">
                   {initials}
@@ -186,31 +184,49 @@ export default function Header() {
               </div>
 
               {dropdownOpen && (
-                <div className="absolute top-full right-0 mt-2 min-w-[180px] bg-[var(--card)] border border-[var(--border)] rounded-[var(--r)] shadow-[0_12px_40px_rgba(0,0,0,.5)] z-[100] animate-fade-up"
+                <div
+                  className="absolute top-full right-0 mt-2 min-w-[180px] bg-[var(--card)] border border-[var(--border)] rounded-[var(--r)] shadow-[0_12px_40px_rgba(0,0,0,.5)] z-[100] animate-fade-up"
                   onClick={(e) => e.stopPropagation()}>
+
+                  {/* Admin only sees Admin Dashboard */}
                   {displayRole === 'admin' && (
-                    <Link href="/admin" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all" onClick={() => setDropdownOpen(false)}>
+                    <Link href="/admin"
+                      className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
+                      onClick={() => setDropdownOpen(false)}>
                       📊 Admin Dashboard
                     </Link>
                   )}
+
+                  {/* Supplier only sees Supplier Dashboard */}
                   {displayRole === 'supplier' && (
-                    <Link href="/supplier" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all" onClick={() => setDropdownOpen(false)}>
+                    <Link href="/supplier"
+                      className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
+                      onClick={() => setDropdownOpen(false)}>
                       🏭 Supplier Dashboard
                     </Link>
                   )}
-                  {(displayRole === 'buyer' || displayRole === 'admin') && (
+
+                  {/* Buyer only sees buyer menu items */}
+                  {displayRole === 'buyer' && (
                     <>
-                      <Link href="/dashboard" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all" onClick={() => setDropdownOpen(false)}>
+                      <Link href="/dashboard"
+                        className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
+                        onClick={() => setDropdownOpen(false)}>
                         📦 My Orders
                       </Link>
-                      <Link href="/dashboard?tab=viewings" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all" onClick={() => setDropdownOpen(false)}>
+                      <Link href="/dashboard?tab=viewings"
+                        className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
+                        onClick={() => setDropdownOpen(false)}>
                         📅 My Viewings
                       </Link>
-                      <Link href="/dashboard?tab=team" className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all" onClick={() => setDropdownOpen(false)}>
+                      <Link href="/dashboard?tab=team"
+                        className="block px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all"
+                        onClick={() => setDropdownOpen(false)}>
                         👥 Company &amp; Team
                       </Link>
                     </>
                   )}
+
                   <hr className="border-[var(--border)]" />
                   <button onClick={handleSignOut}
                     className="block w-full text-left px-4 py-2.5 text-[11px] text-[var(--txt)] hover:bg-[var(--surface)] hover:text-[var(--gold)] transition-all">
@@ -220,8 +236,10 @@ export default function Header() {
               )}
             </div>
           ) : (
+            /* ── LOGGED OUT: Demo login dropdown ── */
             <div className="relative">
-              <button onClick={(e) => { e.stopPropagation(); setLoginDropdownOpen(!loginDropdownOpen) }}
+              <button
+                onClick={(e) => { e.stopPropagation(); setLoginDropdownOpen(!loginDropdownOpen) }}
                 className="flex items-center gap-2 py-1.5 px-3 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--r)] transition-all hover:border-[var(--gold)]">
                 <div style={{ fontSize: 9, letterSpacing: '1px', color: 'var(--gold)' }}>⚡</div>
                 <div className="hidden sm:block">
@@ -231,13 +249,15 @@ export default function Header() {
               </button>
 
               {loginDropdownOpen && (
-                <div className="absolute top-full right-0 mt-2 w-[220px] bg-[var(--card)] border border-[var(--border)] rounded-[var(--r)] shadow-[0_12px_40px_rgba(0,0,0,.6)] z-[100] overflow-hidden"
+                <div
+                  className="absolute top-full right-0 mt-2 w-[220px] bg-[var(--card)] border border-[var(--border)] rounded-[var(--r)] shadow-[0_12px_40px_rgba(0,0,0,.6)] z-[100] overflow-hidden"
                   onClick={(e) => e.stopPropagation()}>
                   <div style={{ padding: '10px 14px 6px', fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
                     ⚡ Quick Demo Login
                   </div>
                   {DEMO_LOGINS.map(acc => (
-                    <a key={acc.role} href={acc.href} onClick={() => setLoginDropdownOpen(false)}
+                    <a key={acc.role} href={acc.href}
+                      onClick={() => setLoginDropdownOpen(false)}
                       className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface)] transition-all">
                       <span style={{ fontSize: 20 }}>{acc.icon}</span>
                       <div>
@@ -247,7 +267,8 @@ export default function Header() {
                     </a>
                   ))}
                   <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px' }}>
-                    <Link href="/auth?tab=login" onClick={() => setLoginDropdownOpen(false)}
+                    <Link href="/auth?tab=login"
+                      onClick={() => setLoginDropdownOpen(false)}
                       style={{ fontSize: 10, color: 'var(--muted)', display: 'block', textAlign: 'center' }}
                       className="hover:text-white transition-colors">
                       Sign in with your own account →
@@ -259,7 +280,8 @@ export default function Header() {
           )}
 
           {/* Mobile hamburger */}
-          <button className="xl:hidden text-[var(--muted)] ml-1" onClick={(e) => { e.stopPropagation(); setMobileOpen(!mobileOpen) }}>
+          <button className="xl:hidden text-[var(--muted)] ml-1"
+            onClick={(e) => { e.stopPropagation(); setMobileOpen(!mobileOpen) }}>
             <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
               {mobileOpen ? <path d="M6 6l12 12M6 18L18 6" /> : <path d="M4 6h16M4 12h16M4 18h16" />}
             </svg>
@@ -276,11 +298,15 @@ export default function Header() {
               link.external ? (
                 <a key={link.id} href={link.id} target="_blank" rel="noopener noreferrer"
                   className="block py-2.5 text-[11px] tracking-wider uppercase text-[var(--gold)]"
-                  onClick={() => setMobileOpen(false)}>{link.label}</a>
+                  onClick={() => setMobileOpen(false)}>
+                  {link.label}
+                </a>
               ) : (
                 <Link key={link.id} href={link.id}
                   className={`block py-2.5 text-[11px] tracking-wider uppercase ${pathname === link.id ? 'text-[var(--gold)]' : 'text-[var(--muted)]'} hover:text-[var(--gold)] transition-colors`}
-                  onClick={() => setMobileOpen(false)}>{link.label}</Link>
+                  onClick={() => setMobileOpen(false)}>
+                  {link.label}
+                </Link>
               )
             ))}
             <hr className="border-[var(--border)]" />
@@ -288,13 +314,18 @@ export default function Header() {
               <div className="pt-2 space-y-1">
                 <div style={{ fontSize: 8, letterSpacing: 2, color: 'var(--muted)', textTransform: 'uppercase', paddingBottom: 6 }}>⚡ Demo Login</div>
                 {DEMO_LOGINS.map(acc => (
-                  <a key={acc.role} href={acc.href} className="flex items-center gap-2 py-2 hover:text-white transition-colors" onClick={() => setMobileOpen(false)}>
+                  <a key={acc.role} href={acc.href}
+                    className="flex items-center gap-2 py-2 hover:text-white transition-colors"
+                    onClick={() => setMobileOpen(false)}>
                     <span>{acc.icon}</span>
                     <span style={{ fontSize: 11, color: acc.color }}>{acc.label}</span>
                     <span style={{ fontSize: 9, color: 'var(--muted)' }}>— {acc.sub}</span>
                   </a>
                 ))}
-                <Link href="/auth?tab=register" className="btn-gold btn-sm block text-center mt-2" onClick={() => setMobileOpen(false)}>Apply for Trade Account</Link>
+                <Link href="/auth?tab=register" className="btn-gold btn-sm block text-center mt-2"
+                  onClick={() => setMobileOpen(false)}>
+                  Apply for Trade Account
+                </Link>
               </div>
             )}
           </div>
