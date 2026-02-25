@@ -406,7 +406,7 @@ export default function DashboardClient({
                         const name = item.name || item.product?.name || 'Product'
                         const sku = item.sku || item.product?.sku || '—'
                         const qty = item.qty || item.quantity || 0
-                        const total = item.line_total ?? (item.unit_price * item.quantity) ?? 0
+                        const total = item.line_total != null ? item.line_total : (item.unit_price && item.quantity ? item.unit_price * item.quantity : 0)
                         return (
                         <div key={idx} style={{
                           display: 'flex', justifyContent: 'space-between',
