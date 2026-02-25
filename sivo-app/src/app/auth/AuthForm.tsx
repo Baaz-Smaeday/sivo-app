@@ -7,6 +7,13 @@ import { createClient } from '@/lib/supabase-browser'
 const BUSINESS_TYPES = ['Retailer', 'Interior Designer', 'Hospitality', 'Contractor', 'Online Retailer', 'Other']
 const SPEND_RANGES = ['Under £5k', '£5k–£15k', '£15k–£50k', '£50k+']
 
+// ─── DEMO ACCOUNTS (matches HTML file) ───
+const DEMO_ACCOUNTS = [
+  { label: '👑 Admin', sub: 'Navi Singh · SIVO', email: 'admin@sivohome.com', pass: 'admin123', role: 'admin', color: 'var(--gold)' },
+  { label: '🛒 Buyer', sub: 'James Wilson · Wilson Interiors', email: 'buyer@demo.co.uk', pass: 'buyer123', role: 'buyer', color: '#4fc3f7' },
+  { label: '🏭 Supplier', sub: 'Raj Patel · GHP Manufacturing', email: 'supplier@demo.co.uk', pass: 'supplier123', role: 'supplier', color: '#81c784' },
+]
+
 export default function AuthForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -16,6 +23,7 @@ export default function AuthForm() {
     (searchParams.get('tab') as 'login' | 'register') || 'login'
   )
   const [loading, setLoading] = useState(false)
+  const [demoLoading, setDemoLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -38,23 +46,10 @@ export default function AuthForm() {
     if (t === 'login' || t === 'register') setTab(t)
   }, [searchParams])
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+  const doLogin = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: loginEmail,
-      password: loginPassword,
-    })
-
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
-    }
-
-    // Check role and redirect
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data: profile } = await supabase
@@ -65,11 +60,36 @@ export default function AuthForm() {
 
       if (profile?.role === 'admin') {
         router.push('/admin')
+      } else if (profile?.role === 'supplier') {
+        router.push('/admin')
       } else {
         router.push('/dashboard')
       }
       router.refresh()
     }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      await doLogin(loginEmail, loginPassword)
+    } catch (err: any) {
+      setError(err.message || 'Login failed')
+    }
+    setLoading(false)
+  }
+
+  const handleDemoLogin = async (email: string, pass: string) => {
+    setDemoLoading(email)
+    setError('')
+    try {
+      await doLogin(email, pass)
+    } catch (err: any) {
+      setError(`Demo login failed for ${email}. Make sure the account exists — see setup instructions below.`)
+    }
+    setDemoLoading(null)
   }
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -108,9 +128,7 @@ export default function AuthForm() {
       email: regEmail,
       password: regPassword,
       options: {
-        data: {
-          full_name: regName,
-        },
+        data: { full_name: regName },
       },
     })
 
@@ -130,7 +148,7 @@ export default function AuthForm() {
         })
         .eq('id', authData.user.id)
 
-      // 4. Also write to trade_applications for admin review
+      // 4. Trade application for admin review
       await supabase.from('trade_applications').insert({
         company_id: companyData.id,
         full_name: regName,
@@ -157,48 +175,108 @@ export default function AuthForm() {
   }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* Tabs */}
-        <div className="flex border border-brand-border rounded-lg overflow-hidden mb-6">
+    <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 16px' }}>
+      <div style={{ width: '100%', maxWidth: 440 }}>
+
+        {/* ─── DEMO LOGIN BUTTONS ─── */}
+        <div className="card" style={{
+          padding: 20, marginBottom: 24,
+          background: 'linear-gradient(135deg, rgba(201,169,110,.04), transparent)',
+          borderColor: 'rgba(201,169,110,.15)',
+        }}>
+          <div style={{ fontSize: 9, letterSpacing: 2.5, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12, textAlign: 'center' }}>
+            ⚡ Quick Demo Login
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            {DEMO_ACCOUNTS.map(acc => (
+              <button
+                key={acc.email}
+                onClick={() => handleDemoLogin(acc.email, acc.pass)}
+                disabled={demoLoading !== null}
+                className="card card-glow"
+                style={{
+                  padding: '14px 8px',
+                  textAlign: 'center',
+                  cursor: demoLoading ? 'wait' : 'pointer',
+                  background: demoLoading === acc.email ? 'rgba(201,169,110,.08)' : 'transparent',
+                  border: 'none',
+                  transition: 'all .2s',
+                }}
+              >
+                <div style={{ fontSize: 22, marginBottom: 4 }}>
+                  {demoLoading === acc.email ? '⏳' : acc.label.split(' ')[0]}
+                </div>
+                <div style={{ fontSize: 11, color: acc.color, fontWeight: 600 }}>
+                  {demoLoading === acc.email ? 'Signing in...' : acc.label.split(' ').slice(1).join(' ')}
+                </div>
+                <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>{acc.sub}</div>
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--muted)', textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>
+            Admin: admin@sivohome.com / admin123 · Buyer: buyer@demo.co.uk / buyer123 · Supplier: supplier@demo.co.uk / supplier123
+          </div>
+        </div>
+
+        {/* ─── DIVIDER ─── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1.5 }}>or sign in manually</span>
+          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        </div>
+
+        {/* ─── TABS ─── */}
+        <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
           <button
             onClick={() => { setTab('login'); setError(''); setSuccess('') }}
-            className={`flex-1 py-3 text-xs font-semibold tracking-[1.5px] uppercase transition-colors ${
-              tab === 'login'
-                ? 'bg-brand-surface text-brand-gold'
-                : 'bg-brand-bg text-brand-muted hover:text-brand-text'
-            }`}
+            style={{
+              flex: 1, padding: '12px 0', fontSize: 11, fontWeight: 600,
+              letterSpacing: '1.5px', textTransform: 'uppercase',
+              background: tab === 'login' ? 'var(--surface)' : 'transparent',
+              color: tab === 'login' ? 'var(--gold)' : 'var(--muted)',
+              border: 'none', cursor: 'pointer', transition: 'all .2s',
+            }}
           >
             Login
           </button>
           <button
             onClick={() => { setTab('register'); setError(''); setSuccess('') }}
-            className={`flex-1 py-3 text-xs font-semibold tracking-[1.5px] uppercase transition-colors ${
-              tab === 'register'
-                ? 'bg-brand-surface text-brand-gold'
-                : 'bg-brand-bg text-brand-muted hover:text-brand-text'
-            }`}
+            style={{
+              flex: 1, padding: '12px 0', fontSize: 11, fontWeight: 600,
+              letterSpacing: '1.5px', textTransform: 'uppercase',
+              background: tab === 'register' ? 'var(--surface)' : 'transparent',
+              color: tab === 'register' ? 'var(--gold)' : 'var(--muted)',
+              border: 'none', cursor: 'pointer', transition: 'all .2s',
+            }}
           >
-            Register
+            Apply for Trade Account
           </button>
         </div>
 
         {/* Error / Success */}
         {error && (
-          <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-300 text-sm">
+          <div style={{
+            marginBottom: 16, padding: 12,
+            background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)',
+            borderRadius: 8, color: '#fca5a5', fontSize: 13,
+          }}>
             {error}
           </div>
         )}
         {success && (
-          <div className="mb-4 p-3 bg-green-900/30 border border-green-800 rounded text-green-300 text-sm">
+          <div style={{
+            marginBottom: 16, padding: 12,
+            background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.3)',
+            borderRadius: 8, color: '#86efac', fontSize: 13,
+          }}>
             {success}
           </div>
         )}
 
-        {/* LOGIN FORM */}
+        {/* ─── LOGIN FORM ─── */}
         {tab === 'login' && (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
+          <form onSubmit={handleLogin}>
+            <div style={{ marginBottom: 16 }}>
               <label className="input-label">Email</label>
               <input
                 type="email"
@@ -209,7 +287,7 @@ export default function AuthForm() {
                 required
               />
             </div>
-            <div>
+            <div style={{ marginBottom: 16 }}>
               <label className="input-label">Password</label>
               <input
                 type="password"
@@ -220,30 +298,35 @@ export default function AuthForm() {
                 required
               />
             </div>
-            <button type="submit" disabled={loading} className="btn-gold w-full text-sm tracking-wider uppercase">
+            <button type="submit" disabled={loading} className="btn-gold" style={{
+              width: '100%', fontSize: 12, letterSpacing: '1px', textTransform: 'uppercase',
+            }}>
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
         )}
 
-        {/* REGISTER FORM */}
+        {/* ─── REGISTER FORM ─── */}
         {tab === 'register' && !success && (
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div className="bg-brand-surface border border-brand-border rounded p-4 text-xs text-brand-muted leading-relaxed mb-2">
+          <form onSubmit={handleRegister}>
+            <div className="card" style={{
+              padding: 14, marginBottom: 16,
+              background: 'var(--surface)', fontSize: 12, color: 'var(--muted)', lineHeight: 1.6,
+            }}>
               Trade accounts are for UK-based retailers, interior designers, and hospitality buyers. Applications are reviewed within 1–2 working days.
             </div>
 
-            <div>
+            <div style={{ marginBottom: 14 }}>
               <label className="input-label">Full Name *</label>
               <input type="text" className="input-field" placeholder="Your full name" value={regName} onChange={(e) => setRegName(e.target.value)} required />
             </div>
 
-            <div>
+            <div style={{ marginBottom: 14 }}>
               <label className="input-label">Company Name *</label>
               <input type="text" className="input-field" placeholder="Company name" value={regCompany} onChange={(e) => setRegCompany(e.target.value)} required />
             </div>
 
-            <div>
+            <div style={{ marginBottom: 14 }}>
               <label className="input-label">Business Type *</label>
               <select className="select-field" value={regBusinessType} onChange={(e) => setRegBusinessType(e.target.value)} required>
                 <option value="">Select business type...</option>
@@ -251,7 +334,7 @@ export default function AuthForm() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               <div>
                 <label className="input-label">VAT Number</label>
                 <input type="text" className="input-field" placeholder="GB 123 4567 89" value={regVat} onChange={(e) => setRegVat(e.target.value)} />
@@ -262,7 +345,7 @@ export default function AuthForm() {
               </div>
             </div>
 
-            <div>
+            <div style={{ marginBottom: 14 }}>
               <label className="input-label">Estimated Annual Spend</label>
               <select className="select-field" value={regSpend} onChange={(e) => setRegSpend(e.target.value)}>
                 <option value="">Select range...</option>
@@ -270,25 +353,49 @@ export default function AuthForm() {
               </select>
             </div>
 
-            <div>
+            <div style={{ marginBottom: 14 }}>
               <label className="input-label">Business Email *</label>
               <input type="email" className="input-field" placeholder="your@company.co.uk" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required />
             </div>
 
-            <div>
+            <div style={{ marginBottom: 14 }}>
               <label className="input-label">Password *</label>
               <input type="password" className="input-field" placeholder="Create password (min 6 chars)" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} required minLength={6} />
             </div>
 
-            <button type="submit" disabled={loading} className="btn-gold w-full text-sm tracking-wider uppercase">
+            <button type="submit" disabled={loading} className="btn-gold" style={{
+              width: '100%', fontSize: 12, letterSpacing: '1px', textTransform: 'uppercase',
+            }}>
               {loading ? 'Submitting...' : 'Apply for Trade Account'}
             </button>
 
-            <p className="text-center text-[11px] text-brand-muted">
+            <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', marginTop: 12 }}>
               ✓ Your account will be reviewed and approved within 1–2 working days
             </p>
           </form>
         )}
+
+        {/* ─── SETUP INSTRUCTIONS (collapsible) ─── */}
+        <details style={{ marginTop: 32 }}>
+          <summary style={{ fontSize: 10, color: 'var(--muted)', cursor: 'pointer', letterSpacing: 1 }}>
+            ⚙️ FIRST TIME SETUP — Create demo accounts
+          </summary>
+          <div className="card" style={{ marginTop: 8, padding: 16, fontSize: 11, color: 'var(--muted)', lineHeight: 1.8 }}>
+            <p style={{ marginBottom: 8 }}><strong style={{ color: '#fff' }}>Step 1:</strong> Register 3 accounts via the form above:</p>
+            <div style={{ fontFamily: 'monospace', fontSize: 10, padding: 8, background: 'rgba(0,0,0,.3)', borderRadius: 6, marginBottom: 12 }}>
+              admin@sivohome.com / admin123<br />
+              buyer@demo.co.uk / buyer123<br />
+              supplier@demo.co.uk / supplier123
+            </div>
+            <p style={{ marginBottom: 8 }}><strong style={{ color: '#fff' }}>Step 2:</strong> In Supabase → Table Editor → profiles:</p>
+            <div style={{ fontFamily: 'monospace', fontSize: 10, padding: 8, background: 'rgba(0,0,0,.3)', borderRadius: 6 }}>
+              admin@sivohome.com → role: admin, status: approved<br />
+              buyer@demo.co.uk → role: buyer, status: approved<br />
+              supplier@demo.co.uk → role: supplier, status: approved
+            </div>
+          </div>
+        </details>
+
       </div>
     </div>
   )
