@@ -41,7 +41,6 @@ export async function middleware(request: NextRequest) {
     if (!user) {
       return NextResponse.redirect(new URL('/auth?tab=login', request.url))
     }
-    // Check admin role
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -75,18 +74,10 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }
-```
 
-Then on **line 67** change:
-```
-matcher: ['/admin/:path*', '/dashboard/:path*'],
-```
-to:
-```
-matcher: ['/admin/:path*', '/dashboard/:path*', '/supplier/:path*'],
   return response
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/dashboard/:path*'],
+  matcher: ['/admin/:path*', '/dashboard/:path*', '/supplier/:path*'],
 }
