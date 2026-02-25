@@ -18,19 +18,34 @@ type Product = {
 export default function CatalogClient({ categories, products }: { categories: Category[]; products: Product[] }) {
   const [activeCategory, setActiveCategory] = useState<string>('all')
   const [canSeePrice, setCanSeePrice] = useState(false)
+  const [saved, setSaved] = useState<string[]>([])
+  const [projects, setProjects] = useState<string[]>([])
+  const [projectModal, setProjectModal] = useState<{ open: boolean; productId: string; productName: string }>({ open: false, productId: '', productName: '' })
+  const [newProjectName, setNewProjectName] = useState('')
+  const [projectList, setProjectList] = useState<{ name: string; items: string[] }[]>([])
+  const [toast, setToast] = useState('')
   const supabase = createClient()
   const { addItem, items: basketItems } = useBasket()
 
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2500) }
+
   useEffect(() => {
+    // Load saved + projects from localStorage
+    try {
+      const s = JSON.parse(localStorage.getItem('sivo_saved') || '[]')
+      const p = JSON.parse(localStorage.getItem('sivo_projects') || '[]')
+      setSaved(s)
+      setProjectList(p)
+      setProjects(p.flatMap((pr: any) => pr.items))
+    } catch {}
+
     const check = async () => {
-      // Check demo cookie first
       const demoMatch = document.cookie.match(/sivo-demo-role=([^;]+)/)
       const demoRole = demoMatch ? demoMatch[1] : ''
       if (demoRole === 'buyer' || demoRole === 'admin' || demoRole === 'supplier') {
         setCanSeePrice(true)
         return
       }
-      // Real auth check
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: profile } = await supabase.from('profiles').select('role, status').eq('id', user.id).single()
@@ -40,17 +55,133 @@ export default function CatalogClient({ categories, products }: { categories: Ca
     check()
   }, [])
 
+  const toggleSave = (productId: string, productName: string) => {
+    setSaved(prev => {
+      const next = prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]
+      localStorage.setItem('sivo_saved', JSON.stringify(next))
+      showToast(prev.includes(productId) ? `Removed from saved` : `❤️ ${productName} saved`)
+      return next
+    })
+  }
+
+  const openProjectModal = (productId: string, productName: string) => {
+    setProjectModal({ open: true, productId, productName })
+    setNewProjectName('')
+  }
+
+  const addToProject = (projectName: string) => {
+    setProjectList(prev => {
+      const existing = prev.find(p => p.name === projectName)
+      let next
+      if (existing) {
+        next = prev.map(p => p.name === projectName
+          ? { ...p, items: p.items.includes(projectModal.productId) ? p.items : [...p.items, projectModal.productId] }
+          : p
+        )
+      } else {
+        next = [...prev, { name: projectName, items: [projectModal.productId] }]
+      }
+      localStorage.setItem('sivo_projects', JSON.stringify(next))
+      setProjects(next.flatMap(p => p.items))
+      return next
+    })
+    showToast(`📁 Added to "${projectName}"`)
+    setProjectModal({ open: false, productId: '', productName: '' })
+  }
+
+  const handleNewProject = () => {
+    if (!newProjectName.trim()) return
+    addToProject(newProjectName.trim())
+  }
+
   const filtered = activeCategory === 'all' ? products : products.filter(p => p.category?.slug === activeCategory)
   const getImg = (p: Product) => p.images?.find(i => i.is_primary)?.url || p.images?.[0]?.url || null
   const inBasket = (id: string) => basketItems.some(i => i.productId === id)
-
-  const getStockType = (p: Product) => {
-    if (p.featured) return 'uk'
-    return 'lead'
-  }
+  const getStockType = (p: Product) => p.featured ? 'uk' : 'lead'
 
   return (
     <div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+          padding: '12px 20px', background: 'var(--card)',
+          border: '1px solid rgba(201,169,110,.3)', borderRadius: 8,
+          color: '#fff', fontSize: 13, boxShadow: '0 8px 32px rgba(0,0,0,.5)',
+          animation: 'fadeIn .2s ease',
+        }}>{toast}</div>
+      )}
+
+      {/* Project Modal */}
+      {projectModal.open && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9998,
+          background: 'rgba(0,0,0,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setProjectModal({ open: false, productId: '', productName: '' })}>
+          <div style={{
+            background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12,
+            padding: 28, width: 380, maxWidth: '90vw',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: '#fff', marginBottom: 4 }}>Add to Project</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 20 }}>{projectModal.productName}</div>
+
+            {/* Existing projects */}
+            {projectList.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>Existing Projects</div>
+                {projectList.map(p => (
+                  <button key={p.name} onClick={() => addToProject(p.name)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      width: '100%', padding: '10px 14px', marginBottom: 6,
+                      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6,
+                      color: p.items.includes(projectModal.productId) ? 'var(--gold)' : '#fff',
+                      fontSize: 12, cursor: 'pointer', textAlign: 'left',
+                    }}>
+                    <span>📁 {p.name}</span>
+                    <span style={{ fontSize: 10, color: 'var(--muted)' }}>
+                      {p.items.includes(projectModal.productId) ? '✓ Added' : `${p.items.length} items`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* New project */}
+            <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
+              {projectList.length > 0 ? 'Or Create New Project' : 'Create a Project'}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={newProjectName}
+                onChange={e => setNewProjectName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleNewProject()}
+                placeholder="e.g. Hotel Lobby Refresh"
+                style={{
+                  flex: 1, padding: '10px 14px', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: 6,
+                  color: 'var(--txt)', fontSize: 12,
+                }}
+                autoFocus
+              />
+              <button onClick={handleNewProject}
+                style={{
+                  padding: '10px 16px', background: 'var(--gold)', color: 'var(--dark)',
+                  border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                }}>
+                Create
+              </button>
+            </div>
+
+            <button onClick={() => setProjectModal({ open: false, productId: '', productName: '' })}
+              style={{ marginTop: 16, width: '100%', padding: '8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 11, cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mixed SKU Banner */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
@@ -90,6 +221,8 @@ export default function CatalogClient({ categories, products }: { categories: Ca
             const img = getImg(product)
             const stockType = getStockType(product)
             const isInBasket = inBasket(product.id)
+            const isSaved = saved.includes(product.id)
+            const inProject = projects.includes(product.id)
 
             return (
               <div key={product.id} className="card card-glow shimmer" style={{ overflow: 'hidden' }}>
@@ -105,12 +238,26 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, zIndex: 2 }}>
                       <span className="sivo-seal-badge">SIVO Verified</span>
                     </div>
+                    {/* Heart button on image */}
+                    {canSeePrice && (
+                      <button
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); toggleSave(product.id, product.name) }}
+                        style={{
+                          position: 'absolute', top: 8, left: 8, zIndex: 3,
+                          width: 32, height: 32, borderRadius: '50%',
+                          background: 'rgba(11,11,14,.7)', backdropFilter: 'blur(8px)',
+                          border: `1px solid ${isSaved ? 'rgba(239,68,68,.5)' : 'rgba(255,255,255,.15)'}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 14, cursor: 'pointer', transition: 'all .2s',
+                        }}>
+                        {isSaved ? '❤️' : '🤍'}
+                      </button>
+                    )}
                   </div>
                 </Link>
 
                 {/* Body */}
                 <div className="pc-body">
-                  {/* Tags row */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
                     {product.category && (
                       <span style={{
@@ -126,13 +273,11 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     )}
                   </div>
 
-                  {/* Name + SKU */}
                   <Link href={`/catalog/${product.slug}`} style={{ textDecoration: 'none' }}>
                     <div className="pc-name">{product.name}</div>
                   </Link>
                   <div className="pc-code">{product.sku}</div>
 
-                  {/* Specs */}
                   <div className="pc-specs">
                     {product.materials && <>Material: <b>{product.materials}</b><br /></>}
                     {product.dimensions && <>Size: <b>{product.dimensions}</b><br /></>}
@@ -164,7 +309,7 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     </div>
                   )}
 
-                  {/* Add to basket button */}
+                  {/* Add to basket */}
                   <button
                     className={`btn-add ${isInBasket ? 'btn-added' : ''}`}
                     onClick={() => addItem({
@@ -176,12 +321,28 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     {isInBasket ? `✓ In Basket` : '+ Add to Quote Basket'}
                   </button>
 
-                  {/* Save / Project row */}
+                  {/* Save + Project row */}
                   {canSeePrice && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 }}>
-                      <span style={{ fontSize: 11, cursor: 'pointer', color: 'var(--muted)', transition: 'color .2s' }}>♡ Save</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 8 }}>
+                      <button
+                        onClick={() => toggleSave(product.id, product.name)}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px',
+                          fontSize: 11, color: isSaved ? '#ef4444' : 'var(--muted)',
+                          display: 'flex', alignItems: 'center', gap: 4, transition: 'color .2s',
+                        }}>
+                        {isSaved ? '❤️ Saved' : '🤍 Save'}
+                      </button>
                       <span style={{ color: 'var(--border)' }}>·</span>
-                      <span style={{ fontSize: 11, cursor: 'pointer', color: '#42a5f5' }}>📁 Project</span>
+                      <button
+                        onClick={() => openProjectModal(product.id, product.name)}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px',
+                          fontSize: 11, color: inProject ? 'var(--gold)' : '#42a5f5',
+                          display: 'flex', alignItems: 'center', gap: 4, transition: 'color .2s',
+                        }}>
+                        {inProject ? '📁 In Project' : '📁 Project'}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -190,6 +351,10 @@ export default function CatalogClient({ categories, products }: { categories: Ca
           })}
         </div>
       )}
+
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+      `}</style>
     </div>
   )
 }
