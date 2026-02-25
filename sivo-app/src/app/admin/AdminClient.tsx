@@ -110,10 +110,26 @@ export default function AdminClient({
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', category: '', material: '', price: '', moq: '', description: '', status: 'draft' })
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
+  // ── DEMO ORDERS (added) ──
+  const [demoOrders, setDemoOrders] = useState<any[]>([])
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const supabase = createClient()
   const router = useRouter()
 
-  useEffect(() => { loadProducts() }, [])
+  useEffect(() => {
+    loadProducts()
+    // Load demo orders from buyer demo session (added)
+    try {
+      const orders = JSON.parse(localStorage.getItem('sivo_demo_orders') || '[]')
+      setDemoOrders(orders)
+    } catch {}
+  }, [])
+
+  // Merge demo + real quotes (added)
+  const allQuotes = [
+    ...demoOrders.map(o => ({ ...o, _demo: true })),
+    ...quotes,
+  ]
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -141,6 +157,16 @@ export default function AdminClient({
     await supabase.from('viewing_requests').update({ status }).eq('id', id)
     showToast('Viewing updated')
     router.refresh()
+  }
+
+  // Update demo order status in localStorage (added)
+  const updateDemoOrderStatus = (orderId: string, newStatus: string) => {
+    setDemoOrders(prev => {
+      const updated = prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o)
+      localStorage.setItem('sivo_demo_orders', JSON.stringify(updated))
+      return updated
+    })
+    showToast('Order status updated')
   }
 
   const saveProduct = async () => {
@@ -182,6 +208,7 @@ export default function AdminClient({
 
   const buyers = profiles.filter(p => p.role === 'buyer')
   const pendingApps = applications.filter(a => a.status === 'pending')
+  const pendingQuotes = allQuotes.filter(q => q.status === 'pending').length // (added)
   const filteredProducts = products.filter(p => {
     const matchSearch = !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase())
     const matchCat = productCat === 'All' || p.category === productCat
@@ -213,6 +240,10 @@ export default function AdminClient({
             {item.id === 'approvals' && pendingApps.length > 0 && (
               <span style={{ marginLeft: 'auto', background: '#ffa726', color: '#000', fontSize: 9, fontWeight: 700, borderRadius: 10, padding: '1px 6px' }}>{pendingApps.length}</span>
             )}
+            {/* Badge for pending orders (added) */}
+            {item.id === 'orders' && pendingQuotes > 0 && (
+              <span style={{ marginLeft: 'auto', background: '#42a5f5', color: '#000', fontSize: 9, fontWeight: 700, borderRadius: 10, padding: '1px 6px' }}>{pendingQuotes}</span>
+            )}
           </div>
         ))}
         <div style={{ borderTop: '1px solid var(--border)', margin: '16px 24px' }} />
@@ -238,7 +269,7 @@ export default function AdminClient({
                 { n: SUPPLIERS.length, l: 'Production Partners', c: '#66bb6a', ch: 'All verified', click: 'partners' },
                 { n: viewings.filter(v => v.status === 'new').length, l: 'New Viewings', c: '#42a5f5', ch: 'Schedule now', click: 'viewings' },
                 { n: pendingApps.length, l: 'Pending Approvals', c: '#ffa726', ch: 'Review now', click: 'approvals' },
-                { n: quotes.length, l: 'Total Quotes', c: '#42a5f5', ch: `Active: ${quotes.filter(q => q.status === 'pending').length}`, click: 'orders' },
+                { n: allQuotes.length, l: 'Total Quotes', c: '#42a5f5', ch: `Active: ${pendingQuotes}`, click: 'orders' }, // (updated to allQuotes)
                 { n: `£0`, l: 'Total Revenue', c: '#ffa726', ch: 'This month', click: 'orders' },
               ].map(s => (
                 <div key={s.l} onClick={() => setTab(s.click as Tab)} style={{ padding: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', transition: 'all .2s' }}
@@ -253,11 +284,14 @@ export default function AdminClient({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, padding: 20 }}>
                 <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 18, color: '#fff', marginBottom: 14 }}>Recent Quotes</div>
-                {quotes.length ? quotes.slice(0, 5).map((q: any) => (
+                {allQuotes.length ? allQuotes.slice(0, 5).map((q: any) => ( // (updated to allQuotes)
                   <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
                     <div>
-                      <div style={{ color: '#fff' }}>{q.profile?.full_name || 'Unknown'}</div>
-                      <div style={{ fontSize: 10, color: 'var(--muted)' }}>{q.company?.name || ''} · {new Date(q.created_at).toLocaleDateString('en-GB')}</div>
+                      <div style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {q.profile?.full_name || 'Unknown'}
+                        {q._demo && <span style={{ fontSize: 8, padding: '1px 5px', background: 'rgba(66,165,245,.15)', color: '#42a5f5', borderRadius: 3, border: '1px solid rgba(66,165,245,.3)' }}>DEMO</span>}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--muted)' }}>{q.company?.name || ''} · {new Date(q.created_at).toLocaleDateString('en-GB')} · £{(q.total_estimate || 0).toLocaleString()}</div>
                     </div>
                     {tag(q.status || 'pending')}
                   </div>
@@ -423,30 +457,75 @@ export default function AdminClient({
           <div>
             <div style={{ marginBottom: 24 }}>
               <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Quote Requests</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{quotes.length} total · {quotes.filter(q => q.status === 'pending').length} pending</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{allQuotes.length} total · {pendingQuotes} pending</div>
             </div>
-            {quotes.length > 0 ? (
-              <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--surface)' }}>
-                      {['Ref', 'Buyer', 'Company', 'Date', 'Status'].map(h => (
-                        <th key={h} style={{ padding: '10px 14px', fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gold)', textAlign: 'left' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quotes.map((q: any) => (
-                      <tr key={q.id} style={{ borderTop: '1px solid var(--border)' }}>
-                        <td style={{ padding: '10px 14px', fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>{q.id?.slice(0, 8)}</td>
-                        <td style={{ padding: '10px 14px', fontSize: 12, color: '#fff' }}>{q.profile?.full_name || '—'}</td>
-                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>{q.company?.name || '—'}</td>
-                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--muted)' }}>{new Date(q.created_at).toLocaleDateString('en-GB')}</td>
-                        <td style={{ padding: '10px 14px' }}>{tag(q.status || 'pending')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {allQuotes.length > 0 ? ( // (updated to allQuotes)
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {allQuotes.map((q: any) => (
+                  <div key={q.id} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+                    {/* Clickable header row */}
+                    <div onClick={() => setExpandedOrder(expandedOrder === q.id ? null : q.id)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.03)'}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 12, color: '#fff', fontFamily: 'monospace' }}>{q.ref_id || q.id?.slice(0, 8)}</span>
+                          {q._demo && <span style={{ fontSize: 8, padding: '1px 6px', background: 'rgba(66,165,245,.15)', color: '#42a5f5', border: '1px solid rgba(66,165,245,.3)', borderRadius: 3, letterSpacing: '1px' }}>DEMO</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                          {q.profile?.full_name || '—'} · {q.company?.name || '—'} · £{(q.total_estimate || 0).toLocaleString()} · {new Date(q.created_at).toLocaleDateString('en-GB')}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {tag(q.status || 'pending')}
+                        <span style={{ fontSize: 10, color: 'var(--muted)' }}>{expandedOrder === q.id ? '▲' : '▼'}</span>
+                      </div>
+                    </div>
+                    {/* Expanded detail */}
+                    {expandedOrder === q.id && (
+                      <div style={{ borderTop: '1px solid var(--border)', padding: 16, background: 'rgba(0,0,0,.2)' }}>
+                        {q.items && q.items.length > 0 && (
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase' as const, color: 'var(--muted)', marginBottom: 8 }}>Order Items</div>
+                            {q.items.map((item: any, i: number) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                                {item.image && <img src={item.image} alt={item.name} style={{ width: 36, height: 36, borderRadius: 4, objectFit: 'cover' as const, opacity: .8 }} />}
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 12, color: '#fff' }}>{item.name}</div>
+                                  <div style={{ fontSize: 10, color: 'var(--muted)' }}>{item.sku}</div>
+                                </div>
+                                <div style={{ textAlign: 'right' as const }}>
+                                  <div style={{ fontSize: 11, color: '#fff' }}>×{item.qty}</div>
+                                  <div style={{ fontSize: 11, color: 'var(--gold)' }}>£{(item.line_total || 0).toLocaleString()}</div>
+                                </div>
+                              </div>
+                            ))}
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
+                              <span style={{ color: 'var(--gold)', fontWeight: 600 }}>Total: £{(q.total_estimate || 0).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        )}
+                        {q.notes && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}><b style={{ color: '#fff' }}>Notes:</b> {q.notes}</div>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase' as const, color: 'var(--muted)' }}>Update status:</span>
+                          <select value={q.status || 'pending'}
+                            onChange={async e => {
+                              if (q._demo) {
+                                updateDemoOrderStatus(q.id, e.target.value)
+                              } else {
+                                await supabase.from('quote_requests').update({ status: e.target.value }).eq('id', q.id)
+                                router.refresh()
+                              }
+                            }}
+                            style={{ padding: '4px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', fontSize: 11 }}>
+                            {['pending', 'quoted', 'confirmed', 'rejected', 'completed'].map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             ) : (
               <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--muted)' }}>
