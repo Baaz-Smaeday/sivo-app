@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type Tab = 'overview' | 'products' | 'partners' | 'orders' | 'viewings' | 'approvals' | 'buyers'
+type Tab = 'overview' | 'products' | 'partners' | 'orders' | 'viewings' | 'approvals' | 'buyers' | 'staff'
 
 const SUPPLIERS = [
   { id: 'raj-wood', name: 'Rajasthan Wood Artisans', loc: 'Jodhpur, Rajasthan', flag: '🇮🇳', spec: 'Acacia & mango wood furniture, recycled wood', rating: 4.9, certs: ['FSC', 'ISO 9001', 'REACH'], tier: 'signature', products: 14, qc: 94, compliance: 97 },
@@ -113,6 +113,13 @@ export default function AdminClient({
   // ── DEMO ORDERS (added) ──
   const [demoOrders, setDemoOrders] = useState<any[]>([])
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
+  const [statusMenuOpen, setStatusMenuOpen] = useState<string | null>(null)
+  // ── STAFF MANAGEMENT ──
+  const [staffMembers, setStaffMembers] = useState<any[]>(() => {
+    try { return JSON.parse(localStorage.getItem('sivo_staff') || '[]') } catch { return [] }
+  })
+  const [showAddStaff, setShowAddStaff] = useState(false)
+  const [newStaff, setNewStaff] = useState({ name: '', email: '', department: 'Sales', permissions: [] as string[] })
   const supabase = createClient()
   const router = useRouter()
 
@@ -204,6 +211,7 @@ export default function AdminClient({
     { id: 'viewings', icon: '📅', label: 'Viewings' },
     { id: 'approvals', icon: '✅', label: 'Approvals' },
     { id: 'buyers', icon: '👥', label: 'Trade Buyers' },
+    { id: 'staff', icon: '🏢', label: 'Staff & Access' },
   ]
 
   const buyers = profiles.filter(p => p.role === 'buyer')
@@ -509,18 +517,35 @@ export default function AdminClient({
                         {q.notes && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}><b style={{ color: '#fff' }}>Notes:</b> {q.notes}</div>}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase' as const, color: 'var(--muted)' }}>Update status:</span>
-                          <select value={q.status || 'pending'}
-                            onChange={async e => {
-                              if (q._demo) {
-                                updateDemoOrderStatus(q.id, e.target.value)
-                              } else {
-                                await supabase.from('quote_requests').update({ status: e.target.value }).eq('id', q.id)
-                                router.refresh()
-                              }
-                            }}
-                            style={{ padding: '4px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', fontSize: 11 }}>
-                            {['pending', 'quoted', 'confirmed', 'rejected', 'completed'].map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
+                          <div style={{ position: 'relative' as const }}>
+                            <button
+                              onClick={() => setStatusMenuOpen(statusMenuOpen === q.id ? null : q.id)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: '#fff', fontSize: 11 }}
+                            >
+                              {tag(q.status || 'pending')}
+                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            </button>
+                            {statusMenuOpen === q.id && (
+                              <div style={{ position: 'absolute' as const, top: '110%', left: 0, zIndex: 100, background: '#1a1a2e', border: '1px solid rgba(201,169,110,.25)', borderRadius: 8, overflow: 'hidden', minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,.6)' }}>
+                                {['pending', 'quoted', 'confirmed', 'rejected', 'completed'].map(s => (
+                                  <button key={s} onClick={async () => {
+                                    setStatusMenuOpen(null)
+                                    if (q._demo) {
+                                      updateDemoOrderStatus(q.id, s)
+                                    } else {
+                                      await supabase.from('quote_requests').update({ status: s }).eq('id', q.id)
+                                      router.refresh()
+                                    }
+                                  }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 14px', background: q.status === s ? 'rgba(201,169,110,.08)' : 'transparent', border: 'none', cursor: 'pointer', transition: 'background .15s' }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.05)')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = q.status === s ? 'rgba(201,169,110,.08)' : 'transparent')}>
+                                    {tag(s)}
+                                    {q.status === s && <span style={{ color: 'var(--gold)', fontSize: 10 }}>✓</span>}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -686,6 +711,172 @@ export default function AdminClient({
                 <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No buyers yet</div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ── STAFF & ACCESS ─────────────────────────────────────────── */}
+        {tab === 'staff' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Staff & Access Control</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Manage team members and their platform permissions</div>
+              </div>
+              <button onClick={() => setShowAddStaff(true)}
+                style={{ padding: '10px 20px', background: 'var(--gold)', color: 'var(--dark)', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer' }}>
+                + Add Staff Member
+              </button>
+            </div>
+
+            {/* Department permission matrix */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
+              {[
+                {
+                  dept: 'Sales', color: '#42a5f5', icon: '💼',
+                  can: ['View all orders & quotes', 'Update order status', 'View buyer profiles', 'Export quote reports', 'View revenue data'],
+                  cannot: ['Edit products', 'Manage partners', 'Add staff', 'Approve trade accounts'],
+                },
+                {
+                  dept: 'Operations', color: '#66bb6a', icon: '⚙️',
+                  can: ['Manage viewings & scheduling', 'Update order status', 'View shipment data', 'Add/edit products', 'Manage QC records'],
+                  cannot: ['View financial data', 'Add staff', 'Approve accounts', 'Access buyer contacts'],
+                },
+                {
+                  dept: 'Accounts', color: '#c9a96e', icon: '📊',
+                  can: ['View all revenue & totals', 'Export financial reports', 'View order history', 'View buyer spend data'],
+                  cannot: ['Edit products', 'Update order status', 'Manage staff', 'Contact buyers directly'],
+                },
+                {
+                  dept: 'Catalogue', color: '#ba68c8', icon: '📦',
+                  can: ['Add & edit products', 'Manage categories', 'Upload product images', 'Update QC scores', 'Manage partner listings'],
+                  cannot: ['View financial data', 'Access buyer info', 'Manage staff', 'Approve trade accounts'],
+                },
+                {
+                  dept: 'Full Access', color: '#ef5350', icon: '👑',
+                  can: ['Everything above', 'Approve/reject trade accounts', 'Manage staff & permissions', 'View all data & reports', 'Platform configuration'],
+                  cannot: ['Create other Full Access accounts'],
+                },
+              ].map(d => (
+                <div key={d.dept} style={{ background: 'var(--card)', border: `1px solid ${d.color}30`, borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: 18 }}>{d.icon}</span>
+                    <span style={{ fontWeight: 600, color: d.color, fontSize: 14 }}>{d.dept}</span>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    {d.can.map(c => (
+                      <div key={c} style={{ fontSize: 10, color: '#66bb6a', padding: '2px 0', display: 'flex', gap: 6 }}>
+                        <span>✓</span><span style={{ color: 'rgba(255,255,255,.6)' }}>{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    {d.cannot.map(c => (
+                      <div key={c} style={{ fontSize: 10, padding: '2px 0', display: 'flex', gap: 6 }}>
+                        <span style={{ color: '#ef5350' }}>✕</span><span style={{ color: 'rgba(255,255,255,.3)' }}>{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Current staff list */}
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: '#fff', marginBottom: 14 }}>Current Team</div>
+            {/* Built-in admin */}
+            <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+              {[
+                { name: 'Navi Singh', email: 'admin@sivohome.com', dept: 'Full Access', color: '#ef5350', initials: 'NS', status: 'Owner' },
+                ...staffMembers,
+              ].map((s: any, i: number) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.01)' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: s.color ? `${s.color}22` : 'rgba(201,169,110,.15)', border: `1px solid ${s.color || '#c9a96e'}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: s.color || '#c9a96e', flexShrink: 0 }}>
+                    {s.initials || s.name.split(' ').map((n: string) => n[0]).join('').toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, color: '#fff', fontWeight: 500 }}>{s.name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>{s.email}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' as const, flexShrink: 0 }}>
+                    <div style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 4, fontSize: 9, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' as const, background: `${s.color || '#c9a96e'}18`, color: s.color || '#c9a96e', border: `1px solid ${s.color || '#c9a96e'}30` }}>{s.dept}</div>
+                    {s.status && <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 3 }}>{s.status}</div>}
+                  </div>
+                  {i > 0 && (
+                    <button onClick={() => {
+                      const updated = staffMembers.filter((_: any, idx: number) => idx !== i - 1)
+                      setStaffMembers(updated)
+                      localStorage.setItem('sivo_staff', JSON.stringify(updated))
+                      showToast('Staff member removed')
+                    }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(239,83,80,.5)', fontSize: 16, padding: 4, transition: 'color .2s' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#ef5350')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,83,80,.5)')}>
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              {staffMembers.length === 0 && (
+                <div style={{ padding: '20px', fontSize: 12, color: 'var(--muted)', textAlign: 'center' as const }}>No additional staff added yet. Click "+ Add Staff Member" to invite team members.</div>
+              )}
+            </div>
+
+            {/* Add Staff Modal */}
+            {showAddStaff && (
+              <div style={{ position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: 20 }}>
+                <div style={{ width: '100%', maxWidth: 480, background: 'var(--card)', border: '1px solid rgba(201,169,110,.2)', borderRadius: 10, padding: 32 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: '#fff' }}>Add Staff Member</div>
+                    <button onClick={() => setShowAddStaff(false)} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                  </div>
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    {[
+                      { label: 'Full Name', key: 'name', placeholder: 'e.g. Sarah Johnson' },
+                      { label: 'Email Address', key: 'email', placeholder: 'sarah@sivohome.com' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label style={{ fontSize: 9, letterSpacing: '2.5px', textTransform: 'uppercase' as const, color: 'var(--gold)', display: 'block', marginBottom: 5 }}>{f.label}</label>
+                        <input value={(newStaff as any)[f.key]} onChange={e => setNewStaff(s => ({ ...s, [f.key]: e.target.value }))} placeholder={f.placeholder}
+                          style={{ width: '100%', padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--txt)', fontSize: 13 }} />
+                      </div>
+                    ))}
+                    <div>
+                      <label style={{ fontSize: 9, letterSpacing: '2.5px', textTransform: 'uppercase' as const, color: 'var(--gold)', display: 'block', marginBottom: 5 }}>Department & Access Level</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {[
+                          { dept: 'Sales', color: '#42a5f5' },
+                          { dept: 'Operations', color: '#66bb6a' },
+                          { dept: 'Accounts', color: '#c9a96e' },
+                          { dept: 'Catalogue', color: '#ba68c8' },
+                          { dept: 'Full Access', color: '#ef5350' },
+                        ].map(d => (
+                          <button key={d.dept} onClick={() => setNewStaff(s => ({ ...s, department: d.dept }))}
+                            style={{ padding: '8px 12px', borderRadius: 6, border: `1px solid ${newStaff.department === d.dept ? d.color : 'var(--border)'}`, background: newStaff.department === d.dept ? `${d.color}18` : 'transparent', color: newStaff.department === d.dept ? d.color : 'var(--muted)', fontSize: 11, cursor: 'pointer', fontWeight: newStaff.department === d.dept ? 600 : 400, transition: 'all .15s' }}>
+                            {d.dept}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+                    <button onClick={() => {
+                      if (!newStaff.name || !newStaff.email) { showToast('Name and email required'); return }
+                      const deptColors: Record<string, string> = { Sales: '#42a5f5', Operations: '#66bb6a', Accounts: '#c9a96e', Catalogue: '#ba68c8', 'Full Access': '#ef5350' }
+                      const member = { name: newStaff.name, email: newStaff.email, dept: newStaff.department, color: deptColors[newStaff.department], status: 'Invited' }
+                      const updated = [...staffMembers, member]
+                      setStaffMembers(updated)
+                      localStorage.setItem('sivo_staff', JSON.stringify(updated))
+                      setNewStaff({ name: '', email: '', department: 'Sales', permissions: [] })
+                      setShowAddStaff(false)
+                      showToast(`${member.name} added as ${member.dept}`)
+                    }} style={{ flex: 1, padding: '12px', background: 'var(--gold)', color: 'var(--dark)', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: '1px', textTransform: 'uppercase' as const }}>
+                      Add Staff Member
+                    </button>
+                    <button onClick={() => setShowAddStaff(false)} style={{ padding: '12px 20px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
