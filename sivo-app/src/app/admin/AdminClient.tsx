@@ -119,6 +119,7 @@ export default function AdminClient({
     try { return JSON.parse(localStorage.getItem('sivo_staff') || '[]') } catch { return [] }
   })
   const [showAddStaff, setShowAddStaff] = useState(false)
+  const [editingStaff, setEditingStaff] = useState<number | null>(null)
   const [newStaff, setNewStaff] = useState({ name: '', email: '', department: 'Sales', permissions: [] as string[] })
   const supabase = createClient()
   const router = useRouter()
@@ -215,7 +216,68 @@ export default function AdminClient({
   ]
 
   const buyers = profiles.filter(p => p.role === 'buyer')
-  const pendingApps = applications.filter(a => a.status === 'pending')
+  // Inject demo buyer so admin always sees at least one buyer in demo
+  const demoBuyer = {
+    id: 'demo-buyer-1', full_name: 'James Wilson', email: 'buyer@demo.co.uk',
+    role: 'buyer', status: 'approved', created_at: new Date().toISOString(),
+    company: { name: 'Wilson Interiors Ltd' }, business_type: 'Interior Designer', _demo: true,
+  }
+  const allBuyers = [...buyers, ...(buyers.find(b => b.email === 'buyer@demo.co.uk') ? [] : [demoBuyer])]
+
+  // ── EXPORT HELPERS ──────────────────────────────────────────────
+  const exportCSV = () => {
+    const rows = [
+      ['Ref', 'Buyer', 'Company', 'Total', 'Status', 'Date'],
+      ...allQuotes.map(q => [
+        q.ref_id || q.id,
+        q.profile?.full_name || 'James Wilson',
+        q.company?.name || 'Wilson Interiors Ltd',
+        `£${(q.total_estimate || 0).toLocaleString()}`,
+        q.status || 'pending',
+        new Date(q.created_at).toLocaleDateString('en-GB'),
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `SIVO-orders-${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+    showToast('CSV exported')
+  }
+
+  const exportPDF = () => {
+    const w = window.open('', '_blank')!
+    const rows = allQuotes.map(q => `
+      <tr>
+        <td>${q.ref_id || q.id}</td>
+        <td>${q.profile?.full_name || 'James Wilson'}</td>
+        <td>${q.company?.name || 'Wilson Interiors Ltd'}</td>
+        <td>£${(q.total_estimate || 0).toLocaleString()}</td>
+        <td style="text-transform:uppercase;font-size:10px;font-weight:600">${q.status || 'pending'}</td>
+        <td>${new Date(q.created_at).toLocaleDateString('en-GB')}</td>
+      </tr>`).join('')
+    w.document.write(`
+      <html><head><title>SIVO Orders Export</title>
+      <style>body{font-family:Georgia,serif;padding:40px;color:#1a1a1a}
+      h1{font-size:24px;margin-bottom:4px}
+      .sub{font-size:12px;color:#666;margin-bottom:32px}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th{background:#1a1a1a;color:#c9a96e;padding:10px 12px;text-align:left;font-size:10px;letter-spacing:1.5px;text-transform:uppercase}
+      td{padding:10px 12px;border-bottom:1px solid #eee}
+      tr:nth-child(even) td{background:#fafafa}
+      .footer{margin-top:40px;font-size:10px;color:#999;border-top:1px solid #eee;padding-top:12px}
+      </style></head><body>
+      <h1>SIVO — Quote Requests Export</h1>
+      <div class="sub">Generated ${new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })} · ${allQuotes.length} orders</div>
+      <table><thead><tr>
+        <th>Reference</th><th>Buyer</th><th>Company</th><th>Total</th><th>Status</th><th>Date</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      <div class="footer">SIVO Premium UK Trade Furniture · trade@sivohome.com · +44 7346 325580</div>
+      </body></html>`)
+    w.document.close(); w.print()
+    showToast('PDF ready to print/save')
+  }
   const pendingQuotes = allQuotes.filter(q => q.status === 'pending').length // (added)
   const filteredProducts = products.filter(p => {
     const matchSearch = !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase())
@@ -463,9 +525,19 @@ export default function AdminClient({
         {/* ── ORDERS ─────────────────────────────────────────────────── */}
         {tab === 'orders' && (
           <div>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Quote Requests</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{allQuotes.length} total · {pendingQuotes} pending</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>Quote Requests</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{allQuotes.length} total · {pendingQuotes} pending</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(66,165,245,.1)', border: '1px solid rgba(66,165,245,.3)', borderRadius: 6, color: '#42a5f5', fontSize: 11, fontWeight: 600, cursor: 'pointer', letterSpacing: '0.5px' }}>
+                  <span>⬇</span> CSV
+                </button>
+                <button onClick={exportPDF} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(201,169,110,.1)', border: '1px solid rgba(201,169,110,.3)', borderRadius: 6, color: '#c9a96e', fontSize: 11, fontWeight: 600, cursor: 'pointer', letterSpacing: '0.5px' }}>
+                  <span>📄</span> PDF
+                </button>
+              </div>
             </div>
             {allQuotes.length > 0 ? ( // (updated to allQuotes)
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -526,7 +598,7 @@ export default function AdminClient({
                               <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                             </button>
                             {statusMenuOpen === q.id && (
-                              <div style={{ position: 'absolute' as const, top: '110%', left: 0, zIndex: 100, background: '#1a1a2e', border: '1px solid rgba(201,169,110,.25)', borderRadius: 8, overflow: 'hidden', minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,.6)' }}>
+                              <div style={{ position: 'absolute' as const, bottom: '110%', left: 0, zIndex: 100, background: '#1a1a2e', border: '1px solid rgba(201,169,110,.25)', borderRadius: 8, overflow: 'hidden', minWidth: 160, boxShadow: '0 -8px 32px rgba(0,0,0,.6)' }}>
                                 {['pending', 'quoted', 'confirmed', 'rejected', 'completed'].map(s => (
                                   <button key={s} onClick={async () => {
                                     setStatusMenuOpen(null)
@@ -673,11 +745,22 @@ export default function AdminClient({
         {/* ── BUYERS ───────────────────────────────────────────────── */}
         {tab === 'buyers' && (
           <div>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>UK Trade Buyers</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{buyers.length} registered buyers</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontSize: 28, color: '#fff' }}>UK Trade Buyers</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{allBuyers.length} registered buyers</div>
+              </div>
+              <button onClick={() => {
+                const rows = [['Name','Company','Email','Business Type','Status','Joined'], ...allBuyers.map((b:any) => [b.full_name||'—', b.company?.name||'—', b.email||'—', b.business_type||'Retailer', b.status||'pending', new Date(b.created_at).toLocaleDateString('en-GB')])]
+                const csv = rows.map(r => r.map((c:string) => `"${c}"`).join(',')).join('\n')
+                const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}))
+                a.download = `SIVO-buyers-${new Date().toISOString().slice(0,10)}.csv`; a.click()
+                showToast('Buyers exported')
+              }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(66,165,245,.1)', border: '1px solid rgba(66,165,245,.3)', borderRadius: 6, color: '#42a5f5', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                ⬇ Export CSV
+              </button>
             </div>
-            <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'auto' }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--surface)' }}>
@@ -687,29 +770,44 @@ export default function AdminClient({
                   </tr>
                 </thead>
                 <tbody>
-                  {buyers.map((b: any) => (
-                    <tr key={b.id} style={{ borderTop: '1px solid var(--border)' }}>
-                      <td style={{ padding: '10px 14px', fontSize: 12, color: '#fff' }}>{b.full_name || '—'}</td>
-                      <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>{b.company?.name || '—'}</td>
-                      <td style={{ padding: '10px 14px', fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>{b.email || '—'}</td>
-                      <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--txt)' }}>Retailer</td>
-                      <td style={{ padding: '10px 14px' }}>{tag(b.status || 'pending')}</td>
-                      <td style={{ padding: '10px 14px', fontSize: 10, color: 'var(--muted)' }}>{new Date(b.created_at).toLocaleDateString('en-GB')}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        {b.status !== 'approved' && (
-                          <button onClick={async () => { await supabase.from('profiles').update({ status: 'approved' }).eq('id', b.id); showToast('Buyer approved'); router.refresh() }}
-                            style={{ padding: '4px 12px', background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, cursor: 'pointer' }}>
-                            Approve
+                  {allBuyers.map((b: any) => (
+                    <tr key={b.id} style={{ borderTop: '1px solid var(--border)', transition: 'background .15s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.025)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(201,169,110,.15)', border: '1px solid rgba(201,169,110,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#c9a96e', flexShrink: 0 }}>
+                            {(b.full_name || 'U').split(' ').map((n:string)=>n[0]).join('').toUpperCase().slice(0,2)}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 12, color: '#fff', fontWeight: 500 }}>{b.full_name || '—'}</div>
+                            {b._demo && <span style={{ fontSize: 8, padding: '1px 5px', background: 'rgba(66,165,245,.15)', color: '#42a5f5', borderRadius: 3, border: '1px solid rgba(66,165,245,.3)' }}>DEMO</span>}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 14px', fontSize: 11, color: 'var(--txt)' }}>{b.company?.name || '—'}</td>
+                      <td style={{ padding: '12px 14px', fontSize: 10, color: 'var(--muted)', fontFamily: 'monospace' }}>{b.email || '—'}</td>
+                      <td style={{ padding: '12px 14px', fontSize: 11, color: 'var(--txt)' }}>{b.business_type || 'Interior Designer'}</td>
+                      <td style={{ padding: '12px 14px' }}>{tag(b.status || 'pending')}</td>
+                      <td style={{ padding: '12px 14px', fontSize: 10, color: 'var(--muted)' }}>{new Date(b.created_at).toLocaleDateString('en-GB')}</td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {b.status !== 'approved' && !b._demo && (
+                            <button onClick={async () => { await supabase.from('profiles').update({ status: 'approved' }).eq('id', b.id); showToast('Buyer approved'); router.refresh() }}
+                              style={{ padding: '4px 10px', background: 'rgba(76,175,80,.15)', color: '#66bb6a', border: '1px solid rgba(76,175,80,.3)', borderRadius: 4, fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>
+                              Approve
+                            </button>
+                          )}
+                          <button onClick={() => { navigator.clipboard.writeText(b.email || ''); showToast('Email copied') }}
+                            style={{ padding: '4px 10px', background: 'rgba(255,255,255,.04)', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 10, cursor: 'pointer' }}>
+                            Copy Email
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {buyers.length === 0 && (
-                <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No buyers yet</div>
-              )}
             </div>
           </div>
         )}
@@ -801,16 +899,25 @@ export default function AdminClient({
                     {s.status && <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 3 }}>{s.status}</div>}
                   </div>
                   {i > 0 && (
-                    <button onClick={() => {
-                      const updated = staffMembers.filter((_: any, idx: number) => idx !== i - 1)
-                      setStaffMembers(updated)
-                      localStorage.setItem('sivo_staff', JSON.stringify(updated))
-                      showToast('Staff member removed')
-                    }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(239,83,80,.5)', fontSize: 16, padding: 4, transition: 'color .2s' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#ef5350')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,83,80,.5)')}>
-                      ✕
-                    </button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => {
+                        setEditingStaff(i - 1)
+                        setNewStaff({ name: s.name, email: s.email, department: s.dept, permissions: [] })
+                        setShowAddStaff(true)
+                      }} style={{ background: 'rgba(201,169,110,.1)', border: '1px solid rgba(201,169,110,.2)', cursor: 'pointer', color: '#c9a96e', fontSize: 10, padding: '4px 10px', borderRadius: 4, fontWeight: 600 }}>
+                        Edit
+                      </button>
+                      <button onClick={() => {
+                        const updated = staffMembers.filter((_: any, idx: number) => idx !== i - 1)
+                        setStaffMembers(updated)
+                        localStorage.setItem('sivo_staff', JSON.stringify(updated))
+                        showToast('Staff member removed')
+                      }} style={{ background: 'none', border: '1px solid rgba(239,83,80,.2)', cursor: 'pointer', color: 'rgba(239,83,80,.6)', fontSize: 10, padding: '4px 10px', borderRadius: 4, transition: 'all .2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.color = '#ef5350'; e.currentTarget.style.borderColor = 'rgba(239,83,80,.5)' }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'rgba(239,83,80,.6)'; e.currentTarget.style.borderColor = 'rgba(239,83,80,.2)' }}>
+                        Remove
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -824,8 +931,8 @@ export default function AdminClient({
               <div style={{ position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: 20 }}>
                 <div style={{ width: '100%', maxWidth: 480, background: 'var(--card)', border: '1px solid rgba(201,169,110,.2)', borderRadius: 10, padding: 32 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: '#fff' }}>Add Staff Member</div>
-                    <button onClick={() => setShowAddStaff(false)} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: '#fff' }}>{editingStaff !== null ? 'Edit Staff Member' : 'Add Staff Member'}</div>
+                    <button onClick={() => { setShowAddStaff(false); setEditingStaff(null); setNewStaff({ name:'', email:'', department:'Sales', permissions:[] }) }} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' }}>✕</button>
                   </div>
                   <div style={{ display: 'grid', gap: 14 }}>
                     {[
@@ -860,17 +967,24 @@ export default function AdminClient({
                     <button onClick={() => {
                       if (!newStaff.name || !newStaff.email) { showToast('Name and email required'); return }
                       const deptColors: Record<string, string> = { Sales: '#42a5f5', Operations: '#66bb6a', Accounts: '#c9a96e', Catalogue: '#ba68c8', 'Full Access': '#ef5350' }
-                      const member = { name: newStaff.name, email: newStaff.email, dept: newStaff.department, color: deptColors[newStaff.department], status: 'Invited' }
-                      const updated = [...staffMembers, member]
+                      const member = { name: newStaff.name, email: newStaff.email, dept: newStaff.department, color: deptColors[newStaff.department], status: editingStaff !== null ? staffMembers[editingStaff]?.status : 'Invited' }
+                      let updated
+                      if (editingStaff !== null) {
+                        updated = staffMembers.map((s: any, idx: number) => idx === editingStaff ? member : s)
+                        showToast(`${member.name} updated`)
+                      } else {
+                        updated = [...staffMembers, member]
+                        showToast(`${member.name} added as ${member.dept}`)
+                      }
                       setStaffMembers(updated)
                       localStorage.setItem('sivo_staff', JSON.stringify(updated))
                       setNewStaff({ name: '', email: '', department: 'Sales', permissions: [] })
+                      setEditingStaff(null)
                       setShowAddStaff(false)
-                      showToast(`${member.name} added as ${member.dept}`)
                     }} style={{ flex: 1, padding: '12px', background: 'var(--gold)', color: 'var(--dark)', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: '1px', textTransform: 'uppercase' as const }}>
-                      Add Staff Member
+                      {editingStaff !== null ? 'Save Changes' : 'Add Staff Member'}
                     </button>
-                    <button onClick={() => setShowAddStaff(false)} style={{ padding: '12px 20px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                    <button onClick={() => { setShowAddStaff(false); setEditingStaff(null) }} style={{ padding: '12px 20px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
                       Cancel
                     </button>
                   </div>
