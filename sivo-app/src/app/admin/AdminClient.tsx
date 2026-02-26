@@ -278,7 +278,8 @@ export default function AdminClient({
     w.document.close(); w.print()
     showToast('PDF ready to print/save')
   }
-  const pendingQuotes = allQuotes.filter(q => q.status === 'pending').length // (added)
+  const pendingApps = applications.filter((a: any) => a.status === 'pending')
+  const pendingQuotes = allQuotes.filter(q => q.status === 'pending').length
   const filteredProducts = products.filter(p => {
     const matchSearch = !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase())
     const matchCat = productCat === 'All' || p.category === productCat
