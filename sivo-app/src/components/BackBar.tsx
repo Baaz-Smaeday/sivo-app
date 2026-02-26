@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 
 const BREADCRUMB_MAP: Record<string, { label: string; parent?: string }> = {
   '/catalog':       { label: 'Collection' },
@@ -28,6 +29,14 @@ interface BackBarProps {
 export default function BackBar({ currentLabel, backHref, crumbs }: BackBarProps) {
   const router   = useRouter()
   const pathname = usePathname()
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    const match = document.cookie.match(/sivo-demo-role=([^;]+)/)
+    if (match?.[1] === 'admin') setIsAdmin(true)
+  }, [])
+
+  if (isAdmin || pathname.startsWith('/admin')) return null
 
   const pageInfo = BREADCRUMB_MAP[pathname] || null
   const label    = currentLabel || pageInfo?.label || ''
