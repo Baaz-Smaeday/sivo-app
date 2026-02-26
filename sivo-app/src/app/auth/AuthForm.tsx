@@ -121,61 +121,10 @@ export default function AuthForm() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-          <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1.5 }}>or sign in manually</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        </div>
-
-        <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
-          {(['login', 'register'] as const).map(t => (
-            <button key={t} onClick={() => { setTab(t); setError(''); setSuccess('') }}
-              style={{ flex: 1, padding: '12px 0', fontSize: 11, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', background: tab === t ? 'var(--surface)' : 'transparent', color: tab === t ? 'var(--gold)' : 'var(--muted)', border: 'none', cursor: 'pointer', transition: 'all .2s' }}>
-              {t === 'login' ? 'Login' : 'Apply for Trade Account'}
-            </button>
-          ))}
-        </div>
-
-        {error && <div style={{ marginBottom: 16, padding: 12, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, color: '#fca5a5', fontSize: 13 }}>{error}</div>}
-        {success && <div style={{ marginBottom: 16, padding: 12, background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.3)', borderRadius: 8, color: '#86efac', fontSize: 13 }}>{success}</div>}
-
-        {tab === 'login' && (
-          <form onSubmit={handleLogin}>
-            <div style={{ marginBottom: 16 }}><label className="input-label">Email</label><input type="email" className="input-field" placeholder="your@company.co.uk" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required /></div>
-            <div style={{ marginBottom: 16 }}><label className="input-label">Password</label><input type="password" className="input-field" placeholder="Enter password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required /></div>
-            <button type="submit" disabled={loading} className="btn-gold" style={{ width: '100%', fontSize: 12, letterSpacing: '1px', textTransform: 'uppercase' }}>{loading ? 'Signing in...' : 'Sign In'}</button>
-          </form>
-        )}
-
-        {tab === 'register' && !success && (
-          <form onSubmit={handleRegister}>
-            <div className="card" style={{ padding: 14, marginBottom: 16, background: 'var(--surface)', fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>Trade accounts are for UK-based retailers, interior designers, and hospitality buyers. Applications are reviewed within 1–2 working days.</div>
-            <div style={{ marginBottom: 14 }}><label className="input-label">Full Name *</label><input type="text" className="input-field" placeholder="Your full name" value={regName} onChange={e => setRegName(e.target.value)} required /></div>
-            <div style={{ marginBottom: 14 }}><label className="input-label">Company Name *</label><input type="text" className="input-field" placeholder="Company name" value={regCompany} onChange={e => setRegCompany(e.target.value)} required /></div>
-            <div style={{ marginBottom: 14 }}>
-              <label className="input-label">Business Type *</label>
-              <select className="select-field" value={regBusinessType} onChange={e => setRegBusinessType(e.target.value)} required>
-                <option value="">Select business type...</option>
-                {BUSINESS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-              <div><label className="input-label">VAT Number</label><input type="text" className="input-field" placeholder="GB 123 4567 89" value={regVat} onChange={e => setRegVat(e.target.value)} /></div>
-              <div><label className="input-label">Website</label><input type="text" className="input-field" placeholder="www.yoursite.co.uk" value={regWebsite} onChange={e => setRegWebsite(e.target.value)} /></div>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label className="input-label">Estimated Annual Spend</label>
-              <select className="select-field" value={regSpend} onChange={e => setRegSpend(e.target.value)}>
-                <option value="">Select range...</option>
-                {SPEND_RANGES.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div style={{ marginBottom: 14 }}><label className="input-label">Business Email *</label><input type="email" className="input-field" placeholder="your@company.co.uk" value={regEmail} onChange={e => setRegEmail(e.target.value)} required /></div>
-            <div style={{ marginBottom: 14 }}><label className="input-label">Password *</label><input type="password" className="input-field" placeholder="Create password (min 6 chars)" value={regPassword} onChange={e => setRegPassword(e.target.value)} required minLength={6} /></div>
-            <button type="submit" disabled={loading} className="btn-gold" style={{ width: '100%', fontSize: 12, letterSpacing: '1px', textTransform: 'uppercase' }}>{loading ? 'Submitting...' : 'Apply for Trade Account'}</button>
-            <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', marginTop: 12 }}>✓ Your account will be reviewed and approved within 1–2 working days</p>
-          </form>
-        )}
+      </div>
+    </div>
+  )
+}
 
       </div>
     </div>
