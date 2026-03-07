@@ -6,17 +6,21 @@ import { createClient } from '@/lib/supabase-browser'
 import { useBasket } from '@/lib/basket'
 
 type Category = { id: string; name: string; slug: string }
+type Subcategory = { id: string; name: string; slug: string; icon: string | null; category_id: string; sort_order: number }
 type Product = {
   id: string; sku: string; name: string; slug: string;
   trade_price: number; rrp: number | null; moq: number;
   materials: string | null; dimensions: string | null;
   description: string | null; featured: boolean; collection: string | null;
+  subcategory_id: string | null;
   category: { name: string; slug: string } | null;
+  subcategory: { name: string; slug: string } | null;
   images: { url: string; alt_text: string | null; is_primary: boolean; sort_order: number }[];
 }
 
-export default function CatalogClient({ categories, products }: { categories: Category[]; products: Product[] }) {
+export default function CatalogClient({ categories, subcategories, products }: { categories: Category[]; subcategories: Subcategory[]; products: Product[] }) {
   const [activeCategory, setActiveCategory] = useState<string>('all')
+  const [activeSubcategory, setActiveSubcategory] = useState<string>('all')
   const [canSeePrice, setCanSeePrice] = useState(false)
   const [saved, setSaved] = useState<string[]>([])
   const [projects, setProjects] = useState<string[]>([])
@@ -30,7 +34,6 @@ export default function CatalogClient({ categories, products }: { categories: Ca
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2500) }
 
   useEffect(() => {
-    // Load saved + projects from localStorage
     try {
       const s = JSON.parse(localStorage.getItem('sivo_saved') || '[]')
       const p = JSON.parse(localStorage.getItem('sivo_projects') || '[]')
@@ -54,6 +57,12 @@ export default function CatalogClient({ categories, products }: { categories: Ca
     }
     check()
   }, [])
+
+  // Reset subcategory when category changes
+  const handleCategoryChange = (slug: string) => {
+    setActiveCategory(slug)
+    setActiveSubcategory('all')
+  }
 
   const toggleSave = (productId: string, productName: string) => {
     setSaved(prev => {
@@ -94,7 +103,21 @@ export default function CatalogClient({ categories, products }: { categories: Ca
     addToProject(newProjectName.trim())
   }
 
-  const filtered = activeCategory === 'all' ? products : products.filter(p => p.category?.slug === activeCategory)
+  // Get subcategories for the active category
+  const activeCategoryId = categories.find(c => c.slug === activeCategory)?.id
+  const filteredSubcategories = activeCategory !== 'all' && activeCategoryId
+    ? subcategories.filter(sc => sc.category_id === activeCategoryId)
+    : []
+
+  // Filter products by category and subcategory
+  let filtered = activeCategory === 'all' ? products : products.filter(p => p.category?.slug === activeCategory)
+  if (activeSubcategory !== 'all') {
+    const subId = subcategories.find(sc => sc.slug === activeSubcategory)?.id
+    if (subId) {
+      filtered = filtered.filter(p => p.subcategory_id === subId)
+    }
+  }
+
   const getImg = (p: Product) => p.images?.find(i => i.is_primary)?.url || p.images?.[0]?.url || null
   const inBasket = (id: string) => basketItems.some(i => i.productId === id)
   const getStockType = (p: Product) => p.featured ? 'uk' : 'lead'
@@ -126,7 +149,6 @@ export default function CatalogClient({ categories, products }: { categories: Ca
             <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: '#fff', marginBottom: 4 }}>Add to Project</div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 20 }}>{projectModal.productName}</div>
 
-            {/* Existing projects */}
             {projectList.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>Existing Projects</div>
@@ -148,7 +170,6 @@ export default function CatalogClient({ categories, products }: { categories: Ca
               </div>
             )}
 
-            {/* New project */}
             <div style={{ fontSize: 9, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
               {projectList.length > 0 ? 'Or Create New Project' : 'Create a Project'}
             </div>
@@ -195,25 +216,67 @@ export default function CatalogClient({ categories, products }: { categories: Ca
       </div>
 
       {/* Category filter */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
-        <button onClick={() => setActiveCategory('all')} className={`px-4 py-2 rounded text-xs tracking-wider uppercase transition-colors ${activeCategory === 'all' ? 'bg-brand-gold text-brand-bg font-semibold' : 'bg-brand-surface border border-brand-border text-brand-muted hover:border-brand-gold hover:text-brand-gold'}`}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: filteredSubcategories.length > 0 ? 12 : 24 }}>
+        <button onClick={() => handleCategoryChange('all')} className={`px-4 py-2 rounded text-xs tracking-wider uppercase transition-colors ${activeCategory === 'all' ? 'bg-brand-gold text-brand-bg font-semibold' : 'bg-brand-surface border border-brand-border text-brand-muted hover:border-brand-gold hover:text-brand-gold'}`}>
           All ({products.length})
         </button>
         {categories.map(cat => {
           const count = products.filter(p => p.category?.slug === cat.slug).length
           if (count === 0) return null
           return (
-            <button key={cat.id} onClick={() => setActiveCategory(cat.slug)} className={`px-4 py-2 rounded text-xs tracking-wider uppercase transition-colors ${activeCategory === cat.slug ? 'bg-brand-gold text-brand-bg font-semibold' : 'bg-brand-surface border border-brand-border text-brand-muted hover:border-brand-gold hover:text-brand-gold'}`}>
+            <button key={cat.id} onClick={() => handleCategoryChange(cat.slug)} className={`px-4 py-2 rounded text-xs tracking-wider uppercase transition-colors ${activeCategory === cat.slug ? 'bg-brand-gold text-brand-bg font-semibold' : 'bg-brand-surface border border-brand-border text-brand-muted hover:border-brand-gold hover:text-brand-gold'}`}>
               {cat.name} ({count})
             </button>
           )
         })}
       </div>
 
+      {/* Subcategory filter - shows when a category is selected */}
+      {filteredSubcategories.length > 0 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 24,
+          paddingLeft: 8, borderLeft: '2px solid rgba(201,169,110,.3)',
+        }}>
+          <button
+            onClick={() => setActiveSubcategory('all')}
+            style={{
+              padding: '6px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+              border: activeSubcategory === 'all' ? '1px solid rgba(201,169,110,.5)' : '1px solid var(--border)',
+              background: activeSubcategory === 'all' ? 'rgba(201,169,110,.15)' : 'var(--surface)',
+              color: activeSubcategory === 'all' ? 'var(--gold)' : 'var(--muted)',
+              fontWeight: activeSubcategory === 'all' ? 600 : 400,
+              transition: 'all .2s',
+            }}
+          >
+            All Subcategories
+          </button>
+          {filteredSubcategories.map(sc => {
+            const count = products.filter(p => p.subcategory_id === sc.id).length
+            return (
+              <button
+                key={sc.id}
+                onClick={() => setActiveSubcategory(sc.slug)}
+                style={{
+                  padding: '6px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+                  border: activeSubcategory === sc.slug ? '1px solid rgba(201,169,110,.5)' : '1px solid var(--border)',
+                  background: activeSubcategory === sc.slug ? 'rgba(201,169,110,.15)' : 'var(--surface)',
+                  color: activeSubcategory === sc.slug ? 'var(--gold)' : 'var(--muted)',
+                  fontWeight: activeSubcategory === sc.slug ? 600 : 400,
+                  transition: 'all .2s',
+                }}
+              >
+                {sc.icon ? `${sc.icon} ` : ''}{sc.name}{count > 0 ? ` (${count})` : ''}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Product Grid */}
       {filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
-          <p style={{ color: 'var(--muted)', fontSize: 16 }}>No products yet.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 16 }}>No products in this {activeSubcategory !== 'all' ? 'subcategory' : 'category'} yet.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>Products are being added regularly — check back soon.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
@@ -238,7 +301,6 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, zIndex: 2 }}>
                       <span className="sivo-seal-badge">SIVO Verified</span>
                     </div>
-                    {/* Heart button on image */}
                     {canSeePrice && (
                       <button
                         onClick={e => { e.preventDefault(); e.stopPropagation(); toggleSave(product.id, product.name) }}
@@ -266,6 +328,13 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                         background: 'rgba(201,169,110,.12)', color: 'var(--gold)',
                       }}>{product.category.name}</span>
                     )}
+                    {product.subcategory && (
+                      <span style={{
+                        display: 'inline-block', padding: '3px 8px', borderRadius: 3,
+                        fontSize: 8, fontWeight: 600, letterSpacing: 1.2, textTransform: 'uppercase',
+                        background: 'rgba(255,255,255,.06)', color: 'var(--muted)',
+                      }}>{product.subcategory.name}</span>
+                    )}
                     {stockType === 'uk' ? (
                       <span className="stock-badge stock-uk">In UK Stock</span>
                     ) : (
@@ -284,7 +353,6 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     {product.moq && <>MOQ: <b>{product.moq} units</b></>}
                   </div>
 
-                  {/* Price */}
                   {canSeePrice ? (
                     <>
                       <div className="pc-price">
@@ -309,7 +377,6 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     </div>
                   )}
 
-                  {/* Add to basket */}
                   <button
                     className={`btn-add ${isInBasket ? 'btn-added' : ''}`}
                     onClick={() => addItem({
@@ -321,7 +388,6 @@ export default function CatalogClient({ categories, products }: { categories: Ca
                     {isInBasket ? `✓ In Basket` : '+ Add to Quote Basket'}
                   </button>
 
-                  {/* Save + Project row */}
                   {canSeePrice && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 8 }}>
                       <button
