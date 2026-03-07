@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase-browser'
 import { useBasket } from '@/lib/basket'
@@ -21,6 +21,8 @@ type Product = {
 export default function CatalogClient({ categories, subcategories, products }: { categories: Category[]; subcategories: Subcategory[]; products: Product[] }) {
   const [activeCategory, setActiveCategory] = useState<string>('all')
   const [activeSubcategory, setActiveSubcategory] = useState<string>('all')
+  const [activeMaterial, setActiveMaterial] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [canSeePrice, setCanSeePrice] = useState(false)
   const [saved, setSaved] = useState<string[]>([])
   const [projects, setProjects] = useState<string[]>([])
@@ -32,6 +34,20 @@ export default function CatalogClient({ categories, subcategories, products }: {
   const { addItem, items: basketItems } = useBasket()
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2500) }
+
+  // Extract unique materials from products
+  const allMaterials = useMemo(() => {
+    const mats = new Set<string>()
+    products.forEach(p => {
+      if (p.materials) {
+        p.materials.split(/[\/,&]/).forEach(m => {
+          const trimmed = m.trim()
+          if (trimmed) mats.add(trimmed)
+        })
+      }
+    })
+    return Array.from(mats).sort()
+  }, [products])
 
   useEffect(() => {
     try {
@@ -58,10 +74,17 @@ export default function CatalogClient({ categories, subcategories, products }: {
     check()
   }, [])
 
-  // Reset subcategory when category changes
+  // Reset filters when category changes
   const handleCategoryChange = (slug: string) => {
     setActiveCategory(slug)
     setActiveSubcategory('all')
+  }
+
+  const clearAllFilters = () => {
+    setActiveCategory('all')
+    setActiveSubcategory('all')
+    setActiveMaterial('all')
+    setSearchQuery('')
   }
 
   const toggleSave = (productId: string, productName: string) => {
@@ -109,14 +132,43 @@ export default function CatalogClient({ categories, subcategories, products }: {
     ? subcategories.filter(sc => sc.category_id === activeCategoryId)
     : []
 
-  // Filter products by category and subcategory
-  let filtered = activeCategory === 'all' ? products : products.filter(p => p.category?.slug === activeCategory)
-  if (activeSubcategory !== 'all') {
-    const subId = subcategories.find(sc => sc.slug === activeSubcategory)?.id
-    if (subId) {
-      filtered = filtered.filter(p => p.subcategory_id === subId)
+  // Filter products
+  const filtered = useMemo(() => {
+    let result = products
+
+    // Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.materials && p.materials.toLowerCase().includes(q)) ||
+        (p.collection && p.collection.toLowerCase().includes(q)) ||
+        (p.category?.name && p.category.name.toLowerCase().includes(q)) ||
+        (p.subcategory?.name && p.subcategory.name.toLowerCase().includes(q))
+      )
     }
-  }
+
+    // Category
+    if (activeCategory !== 'all') {
+      result = result.filter(p => p.category?.slug === activeCategory)
+    }
+
+    // Subcategory
+    if (activeSubcategory !== 'all') {
+      const subId = subcategories.find(sc => sc.slug === activeSubcategory)?.id
+      if (subId) result = result.filter(p => p.subcategory_id === subId)
+    }
+
+    // Material
+    if (activeMaterial !== 'all') {
+      result = result.filter(p => p.materials && p.materials.toLowerCase().includes(activeMaterial.toLowerCase()))
+    }
+
+    return result
+  }, [products, searchQuery, activeCategory, activeSubcategory, activeMaterial, subcategories])
+
+  const hasActiveFilters = activeCategory !== 'all' || activeSubcategory !== 'all' || activeMaterial !== 'all' || searchQuery.trim() !== ''
 
   const getImg = (p: Product) => p.images?.find(i => i.is_primary)?.url || p.images?.[0]?.url || null
   const inBasket = (id: string) => basketItems.some(i => i.productId === id)
@@ -207,13 +259,96 @@ export default function CatalogClient({ categories, subcategories, products }: {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
         background: 'rgba(201,169,110,.06)', border: '1px solid rgba(201,169,110,.12)',
-        borderRadius: 8, marginBottom: 24, flexWrap: 'wrap',
+        borderRadius: 8, marginBottom: 20, flexWrap: 'wrap',
       }}>
         <span style={{ fontSize: 13 }}>📦</span>
         <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600 }}>Mixed SKU ordering available</span>
         <span style={{ fontSize: 11, color: 'var(--muted)' }}>· Combine products from different collections into one consolidated shipment</span>
         <Link href="/trade-terms" style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>View trade terms →</Link>
       </div>
+
+      {/* Search + Material Filter Row */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Search */}
+        <div style={{ position: 'relative', flex: '1 1 280px', minWidth: 200 }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search products, SKUs, materials..."
+            style={{
+              width: '100%', padding: '10px 12px 10px 36px',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 8, color: 'var(--txt)', fontSize: 12,
+              outline: 'none', transition: 'border-color .2s',
+            }}
+            onFocus={e => e.target.style.borderColor = 'rgba(201,169,110,.4)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{
+                position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                background: 'rgba(255,255,255,.1)', border: 'none', borderRadius: '50%',
+                width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, color: 'var(--muted)', cursor: 'pointer',
+              }}
+            >✕</button>
+          )}
+        </div>
+
+        {/* Material filter */}
+        <div style={{ position: 'relative', flex: '0 0 auto' }}>
+          <select
+            value={activeMaterial}
+            onChange={e => setActiveMaterial(e.target.value)}
+            style={{
+              padding: '10px 32px 10px 12px',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 8, color: activeMaterial === 'all' ? 'var(--muted)' : 'var(--gold)',
+              fontSize: 12, cursor: 'pointer', outline: 'none',
+              appearance: 'none', WebkitAppearance: 'none',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236e6e7a' d='M3 4.5L6 8l3-3.5'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center',
+            }}
+          >
+            <option value="all">All Materials</option>
+            {allMaterials.map(mat => (
+              <option key={mat} value={mat}>{mat}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Clear filters */}
+        {hasActiveFilters && (
+          <button
+            onClick={clearAllFilters}
+            style={{
+              padding: '10px 14px', background: 'rgba(239,68,68,.1)',
+              border: '1px solid rgba(239,68,68,.2)', borderRadius: 8,
+              color: '#ef4444', fontSize: 11, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6,
+              transition: 'all .2s',
+            }}
+          >
+            ✕ Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* Active filter summary */}
+      {hasActiveFilters && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16,
+          fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap',
+        }}>
+          <span>Showing {filtered.length} of {products.length} products</span>
+          {searchQuery && <span style={{ padding: '2px 8px', background: 'rgba(201,169,110,.1)', borderRadius: 4, color: 'var(--gold)' }}>Search: "{searchQuery}"</span>}
+          {activeMaterial !== 'all' && <span style={{ padding: '2px 8px', background: 'rgba(201,169,110,.1)', borderRadius: 4, color: 'var(--gold)' }}>{activeMaterial}</span>}
+        </div>
+      )}
 
       {/* Category filter */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: filteredSubcategories.length > 0 ? 12 : 24 }}>
@@ -231,7 +366,7 @@ export default function CatalogClient({ categories, subcategories, products }: {
         })}
       </div>
 
-      {/* Subcategory filter - shows when a category is selected */}
+      {/* Subcategory filter */}
       {filteredSubcategories.length > 0 && (
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 24,
@@ -275,8 +410,23 @@ export default function CatalogClient({ categories, subcategories, products }: {
       {/* Product Grid */}
       {filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
-          <p style={{ color: 'var(--muted)', fontSize: 16 }}>No products in this {activeSubcategory !== 'all' ? 'subcategory' : 'category'} yet.</p>
-          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>Products are being added regularly — check back soon.</p>
+          <div style={{ fontSize: 48, marginBottom: 16, opacity: .3 }}>🔍</div>
+          <p style={{ color: 'var(--muted)', fontSize: 16, marginBottom: 8 }}>
+            {searchQuery ? `No products matching "${searchQuery}"` : `No products in this ${activeSubcategory !== 'all' ? 'subcategory' : 'category'} yet.`}
+          </p>
+          <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 16 }}>Products are being added regularly — check back soon.</p>
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              style={{
+                padding: '8px 16px', background: 'rgba(201,169,110,.1)',
+                border: '1px solid rgba(201,169,110,.2)', borderRadius: 6,
+                color: 'var(--gold)', fontSize: 12, cursor: 'pointer',
+              }}
+            >
+              Clear all filters
+            </button>
+          )}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
